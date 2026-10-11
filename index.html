@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Ride Planner"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style></head><body>
+<title>Magic Kingdom Ride Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: single mobile column — wait-board "next ride" card on top, tabs for priorities and the day log. */
+:root{
+  --bg:#F2F4F8; --surface:#FFFFFF; --ink:#14213A; --muted:#5A6680; --line:#DADFE8;
+  --accent:#C98A08; --accent-soft:#FBF1DA; --accent-ink:#3A2700;
+  --go:#1E7D45; --warn:#A8670D; --stop:#B93A12; --off:#8A93A6;
+  --font-display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --font-body:"Figtree",-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C1322; --surface:#141E33; --ink:#E7EBF3; --muted:#94A0B8; --line:#26324C;
+  --accent:#F0AE33; --accent-soft:#2A2312; --accent-ink:#1A1200;
+  --go:#4BC77E; --warn:#E9A845; --stop:#F07A52; --off:#6E7891; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0C1322; --surface:#141E33; --ink:#E7EBF3; --muted:#94A0B8; --line:#26324C;
+  --accent:#F0AE33; --accent-soft:#2A2312; --accent-ink:#1A1200;
+  --go:#4BC77E; --warn:#E9A845; --stop:#F07A52; --off:#6E7891; color-scheme:dark}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45;margin:0}
+.wrap{max-width:560px;margin:0 auto;padding:16px 16px 48px;display:flex;flex-direction:column;gap:14px}
+h1,h2{font-family:var(--font-display);font-weight:800;letter-spacing:.01em;margin:0;text-wrap:balance}
+h1{font-size:30px;line-height:1}
+h2{font-size:20px;text-transform:uppercase;letter-spacing:.04em}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sub{font-size:13px;color:var(--muted);margin-top:4px}
+.status{display:flex;align-items:center;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--off)}
+.pill.live .dot{background:var(--go)}
+.pill.sample .dot{background:var(--warn)}
+.icon-btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;width:36px;height:36px;display:inline-grid;place-items:center;padding:0}
+.icon-btn svg{width:18px;height:18px}
+.icon-btn:disabled{opacity:.35;cursor:default}
+
+.banner{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:12px;padding:10px 12px;font-size:13px}
+
+.loc{display:flex;align-items:center;gap:10px}
+.loc label{font-size:13px;color:var(--muted);white-space:nowrap}
+select{width:100%;min-width:0;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.tabs button{border:0;background:transparent;border-radius:9px;padding:8px 4px;font-weight:600;font-size:14px;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+
+/* The one loud element: the next-ride board */
+.next{background:var(--surface);border:2px solid var(--accent);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.next .name{font-family:var(--font-display);font-weight:800;font-size:34px;line-height:1.02;text-wrap:balance}
+.next .land{font-size:13px;color:var(--muted);margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 0}
+.stat .v{font-family:var(--font-display);font-weight:800;font-size:30px;line-height:1}
+.stat .v small{font-size:15px;font-weight:600;margin-left:1px}
+.stat .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.why{font-size:14px}
+.actions{display:flex;gap:8px}
+.btn{border-radius:12px;padding:12px 14px;font-weight:700;border:1px solid var(--line);background:var(--surface)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);flex:1}
+.btn.ghost{background:transparent}
+.btn.sm{padding:8px 12px;font-size:13px;border-radius:10px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.card-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+
+.chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.chain li{display:grid;grid-template-columns:56px 1fr auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.chain li:first-child{border-top:0}
+.eta{font-size:13px;font-weight:600;color:var(--muted)}
+.cname{font-weight:600;min-width:0}
+.cmeta{font-size:12px;color:var(--muted)}
+
+.w{font-family:var(--font-display);font-weight:800;font-size:20px;min-width:46px;text-align:center;padding:2px 6px;border-radius:8px;line-height:1.25}
+.w.go{color:var(--go);background:color-mix(in srgb,var(--go) 12%,transparent)}
+.w.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.w.stop{color:var(--stop);background:color-mix(in srgb,var(--stop) 12%,transparent)}
+.w.off{color:var(--off);font-size:12px;font-family:var(--font-body);font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:color-mix(in srgb,var(--off) 12%,transparent)}
+
+.plist{list-style:none;margin:0;padding:0}
+.prow{display:grid;grid-template-columns:26px 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.prow:first-child{border-top:0}
+.rank{font-family:var(--font-display);font-weight:800;font-size:18px;color:var(--muted);text-align:center}
+.prow.skipped .pname,.prow.skipped .rank{opacity:.45}
+.prow.skipped .pname{text-decoration:line-through}
+.pname{font-weight:600;min-width:0}
+.ctrls{display:flex;gap:4px}
+.ctrls .icon-btn{width:32px;height:32px;border-radius:8px}
+.skipbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.wait-input{width:56px;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:var(--bg);text-align:center;font-weight:700}
+.prow{grid-template-columns:36px 26px 1fr auto auto}
+.handle{width:36px;height:40px;border:0;background:transparent;display:grid;place-items:center;color:var(--muted);touch-action:none;cursor:grab;padding:0;border-radius:8px}
+.handle svg{width:20px;height:20px}
+.prow.dragging{background:var(--accent-soft);border-radius:10px;box-shadow:0 4px 14px color-mix(in srgb,var(--ink) 18%,transparent);position:relative;z-index:1}
+.prow.dragging .handle{cursor:grabbing}
+.prow.done .pname{opacity:.55}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--go);margin-left:6px}
+.empty{padding:14px;border:1px dashed var(--line);border-radius:12px;text-align:center;font-size:14px;color:var(--muted)}
+.landhead{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 0 2px}
+.landhead:first-child{margin-top:0}
+.pick{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.landhead + .pick{border-top:0}
+.pick label{display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer;font-weight:500}
+.pick input[type=checkbox]{width:22px;height:22px;flex:0 0 auto;accent-color:var(--accent);margin:0}
+.pick.disabled label{opacity:.45;cursor:default}
+.counter{font-family:var(--font-display);font-weight:800;font-size:20px}
+.pill.cached .dot{background:var(--warn)}
+.pill.busy .dot{background:var(--accent)}
+@media (prefers-reduced-motion:no-preference){.pill.busy .dot{animation:pulse 1s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.25}}
+.refresh-line{font-size:12px;color:var(--muted);margin-top:-8px;text-align:right}
+.banner .btn{margin-top:8px}
+.math{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;margin:0;padding:12px;background:var(--bg);border-radius:10px}
+.math dt{font-weight:700;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.06em;padding-top:2px}
+.math dd{margin:0;min-width:0}
+.math dd b{font-weight:700}
+.board{list-style:none;margin:0;padding:0}
+.brow{display:grid;grid-template-columns:34px 1fr auto;gap:5px 10px;padding:11px 0;border-top:1px solid var(--line);align-items:start}
+.brow:first-child{border-top:0}
+.prank{font-family:var(--font-display);font-weight:800;font-size:16px;color:var(--muted);text-align:center;border:1px solid var(--line);border-radius:8px;padding:2px 0;line-height:1.2}
+.brow.top .prank{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.bscore{font-family:var(--font-display);font-weight:800;font-size:22px;text-align:right;line-height:1}
+.bscore small{display:block;font-family:var(--font-body);font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.bar{grid-column:2/4;height:6px;border-radius:3px;background:color-mix(in srgb,var(--ink) 9%,transparent);overflow:hidden}
+.bar span{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.brow:not(.top) .bar span{background:color-mix(in srgb,var(--accent) 55%,var(--muted))}
+.bnote{grid-column:2/4;font-size:13px}
+.verdict{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:1px}
+.v-best{background:var(--accent);color:var(--accent-ink)}
+.v-backup{color:var(--go);background:color-mix(in srgb,var(--go) 13%,transparent)}
+.v-later{color:var(--warn);background:color-mix(in srgb,var(--warn) 15%,transparent)}
+.v-long{color:var(--stop);background:color-mix(in srgb,var(--stop) 11%,transparent)}
+.v-off{color:var(--off);background:color-mix(in srgb,var(--off) 13%,transparent)}
+.brow.na .cname,.brow.na .prank{opacity:.55}
+
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:transparent;padding:7px 4px;border-radius:7px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--ink)}
+.setting{display:flex;flex-direction:column;gap:6px}
+.toggle{display:flex;align-items:flex-start;gap:10px}
+.toggle input{width:20px;height:20px;margin-top:1px;accent-color:var(--accent)}
+
+.logrow{display:grid;grid-template-columns:62px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.logrow:first-of-type{border-top:0}
+.bigcount{font-family:var(--font-display);font-weight:800;font-size:56px;line-height:.9}
+.addrow{display:flex;gap:8px}
+.addrow select{flex:1}
+footer{font-size:12px;color:var(--muted);line-height:1.5}
+footer a{color:inherit}
+@media (prefers-reduced-motion:no-preference){.next{transition:border-color .2s}}
+.locbox{display:flex;flex-direction:column;gap:6px}
+.gps-line{font-size:13px;display:flex;align-items:center;gap:8px}
+.gps-line .gdot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:var(--off)}
+.gps-line.on .gdot{background:var(--go);box-shadow:0 0 0 4px color-mix(in srgb,var(--go) 22%,transparent)}
+.gps-line.warn .gdot{background:var(--warn)}
+.change{font-size:13px;font-weight:600;background:var(--accent-soft);border-radius:8px;padding:6px 10px}
+.share-url{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-size:12px}
+.est{font-size:11px;font-weight:600;color:var(--muted)}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Ride Planner</h1>
+      <div class="sub">Magic Kingdom · standby lines only</div>
+    </div>
+    <div class="status">
+      <span class="pill" id="pill"><span class="dot"></span><span id="pillText">Loading…</span></span>
+      <button class="icon-btn" id="refresh" aria-label="Refresh wait times">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
+      </button>
+    </div>
+  </header>
+  <div class="refresh-line num" id="refreshLine"></div>
+
+  <div class="banner" id="importBanner" hidden></div>
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="locbox">
+    <div class="gps-line" id="gpsLine"><span class="gdot"></span><span id="gpsText"></span></div>
+    <div class="loc" id="locRow">
+      <label for="locSel">You're at</label>
+      <select id="locSel"></select>
+    </div>
+    <label class="toggle"><input type="checkbox" id="gpsToggle"><span class="small">Use my location automatically</span></label>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-plan" aria-selected="true" data-tab="plan">Next ride</button>
+    <button role="tab" id="tab-prio" aria-selected="false" data-tab="prio">My list</button>
+    <button role="tab" id="tab-day" aria-selected="false" data-tab="day">Today</button>
+  </div>
+
+  <section id="panel-plan" style="display:flex;flex-direction:column;gap:14px">
+    <div class="next" id="next"></div>
+    <div class="card" id="boardCard">
+      <div class="card-head"><h2>Your list, ranked right now</h2></div>
+      <p class="small muted" style="margin:0">Score = priority × timing ÷ total minutes. Re-ranks on every refresh and as you move. The bar compares each ride to the top pick. #N is your priority rank.</p>
+      <ol class="board" id="board"></ol>
+    </div>
+    <div class="card" id="thenCard">
+      <div class="card-head"><h2>Then</h2><span class="small muted">Projected with forecast waits</span></div>
+      <ol class="chain" id="then"></ol>
+    </div>
+  </section>
+
+  <section id="panel-prio" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="card">
+      <div class="card-head"><h2>Your list</h2><span class="counter num" id="slotCount"></span></div>
+      <p class="small muted" style="margin:0">Drag the grip to rank. #1 counts 3× as much as the last ride on the list.</p>
+      <ol class="plist" id="plist"></ol>
+      <div class="actions"><button class="btn sm" id="shareList">Share my list</button><button class="btn sm ghost" id="clearList">Clear list</button></div>
+      <div id="shareBox" hidden>
+        <p class="small muted" style="margin:0 0 6px" id="shareMsg"></p>
+        <input class="share-url" id="shareUrl" readonly aria-label="Link to your ride list">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Pick rides</h2><span class="small muted">Up to 10 at a time</span></div>
+      <div id="picker"></div>
+    </div>
+    <div class="card">
+      <h2>How it scores</h2>
+      <p class="small" style="margin:0">Each open ride gets <b>priority × timing ÷ total minutes</b> (walk + wait + ride), shown as priority points per hour. Highest score wins, so you get the most high-priority rides per hour in the park.</p>
+      <div class="setting">
+        <span class="small muted">Walking pace</span>
+        <div class="seg" id="paceSeg">
+          <button data-pace="easy">Easy</button>
+          <button data-pace="normal">Normal</button>
+          <button data-pace="brisk">Brisk</button>
+        </div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="fcToggle"><span class="small"><b>Use wait forecasts.</b> Boosts rides whose line is short now but forecast to grow, and projects the "Then" list with forecast waits.</span></label>
+      <label class="toggle"><input type="checkbox" id="rerideToggle"><span class="small"><b>Allow re-rides</b> at half priority.</span></label>
+    </div>
+  </section>
+
+  <section id="panel-day" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="card">
+      <div class="card-head">
+        <div><div class="bigcount num" id="count">0</div><div class="small muted">rides today</div></div>
+        <button class="btn sm ghost" id="undo">Undo last</button>
+      </div>
+      <div id="log"></div>
+    </div>
+    <div class="card">
+      <h2>Log a ride</h2>
+      <p class="small muted" style="margin:0">Rode something the planner didn't suggest? Add it so the plan knows.</p>
+      <div class="addrow"><select id="addSel" aria-label="Ride to log"></select><button class="btn sm primary" id="addBtn" style="flex:0 0 auto">Add</button></div>
+    </div>
+    <button class="btn ghost" id="newDay">Start a new day</button>
+  </section>
+
+  <footer>
+    Unofficial tool, not affiliated with Disney. Live waits and forecasts from the <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a> API, with <a href="https://queue-times.com" target="_blank" rel="noopener">Powered by Queue-Times.com</a> as a backup. Refreshes every 10 minutes and each time you open the page. When neither answers, typical waits for the time of day are used (from ThemeParks.wiki forecasts for Oct 10–11, 2026; Buzz Lightyear and Big Thunder are estimated from posted waits), adjusted to today's last live reading. Walk times are straight-line distance × 1.4 for path detours. Ride lengths are approximate; TRON includes the locker stop.
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+const PARK = "75ea578a-adc8-4116-a54d-dccb60765ef9";
+const SRC_TPW = "https://api.themeparks.wiki/v1/entity/" + PARK + "/live";
+const SRC_QT = "https://queue-times.com/parks/6/queue_times.json";
+const PATH_FACTOR = 1.4;
+const PACES = {easy:50, normal:65, brisk:80}; // meters per minute
+const STORE = "mk-ride-planner-v1";
+const CACHE = "mk-ride-planner-live";
+const REFRESH_MS = 10*60000;
+const OPEN_REFRESH_MS = 60000;
+const FRESH_CACHE_MS = 20*60000;
+const MAX_PICKS = 10;
+const PARK_BOX = {s:28.4140, n:28.4240, w:-81.5875, e:-81.5755};
+
+// id, name, land, lat, lon, ride minutes (approx.), name key for the backup source
+const RIDES = [
+ ["5a43d1a7-ad53-4d25-abfe-25625f0da304","TRON Lightcycle / Run","Tomorrowland",28.419625,-81.577985,5,"tron"],
+ ["9d4d5229-7142-44b6-b4fb-528920969a2c","Seven Dwarfs Mine Train","Fantasyland",28.42037,-81.58031,3,"seven dwarfs"],
+ ["b2260923-9315-40fd-9c6b-44dd811dbe64","Space Mountain","Tomorrowland",28.4188341691,-81.5781962872,3,"space mountain"],
+ ["de3309ca-97d5-4211-bffe-739fed47e92f","Big Thunder Mountain Railroad","Frontierland",28.4199638504,-81.5846422864,4,"big thunder"],
+ ["73cb9445-0695-47a3-87ce-d08ae36b5f3c","Tiana's Bayou Adventure","Frontierland",28.419418,-81.58498,11,"tiana"],
+ ["86a41273-5f15-4b54-93b6-829f140e5161","Peter Pan's Flight","Fantasyland",28.4202640272,-81.5818916811,3,"peter pan"],
+ ["2551a77d-023f-4ab1-9a19-8afec0190f39","Haunted Mansion","Liberty Square",28.4202,-81.58288,9,"haunted mansion"],
+ ["352feb94-e52e-45eb-9c92-e4b44c6b1a9d","Pirates of the Caribbean","Adventureland",28.4179699235,-81.5842252029,9,"pirates of the caribbean"],
+ ["796b0a25-c51e-456e-9bb8-50a324e301b3","Jungle Cruise","Adventureland",28.41797818,-81.5834393157,10,"jungle cruise"],
+ ["72c7343a-f7fb-4f66-95df-c91016de7338","Buzz Lightyear's Space Ranger Spin","Tomorrowland",28.4182868839,-81.5794086456,5,"buzz"],
+ ["3cba0cb4-e2a6-402c-93ee-c11ffcb127ef","Under the Sea: Little Mermaid","Fantasyland",28.4211203226,-81.5799752427,6,"little mermaid"],
+ ["0d94ad60-72f0-4551-83a6-ebaecdd89737","Winnie the Pooh","Fantasyland",28.420212,-81.580266,4,"pooh"],
+ ["f5aad2d4-a419-4384-bd9a-42f86385c750","it's a small world","Fantasyland",28.4204816402,-81.5820392026,11,"small world"],
+ ["ffcfeaa2-1416-4920-a1ed-543c1a1695c4","PeopleMover","Tomorrowland",28.418155,-81.579033,10,"peoplemover"],
+ ["f163ddcd-43e1-488d-8276-2381c1db0a39","Tomorrowland Speedway","Tomorrowland",28.419368,-81.579302,5,"speedway"],
+ ["e8f0b426-7645-4ea3-8b41-b94ae7091a41","Monsters, Inc. Laugh Floor","Tomorrowland",28.4183977566,-81.5797358751,15,"laugh floor"],
+ ["7c5e1e02-3a44-4151-9005-44066d5ba1da","Mickey's PhilharMagic","Fantasyland",28.4200304909,-81.5814839853,12,"philharmagic"],
+ ["d9d12438-d999-4482-894b-8955fdb20ccf","Astro Orbiter","Tomorrowland",28.4184926179,-81.5789887902,2,"astro orbiter"],
+ ["0aae716c-af13-4439-b638-d75fb1649df3","Mad Tea Party","Fantasyland",28.4200230397,-81.5798248916,2,"mad tea"],
+ ["890fa430-89c0-4a3f-96c9-11597888005e","Dumbo the Flying Elephant","Fantasyland",28.420509033,-81.5789473057,2,"dumbo"],
+ ["924a3b2c-6b4b-49e5-99d3-e9dc3f2e8a48","The Barnstormer","Fantasyland",28.4207661576,-81.5783907473,1,"barnstormer"],
+ ["96455de6-f4f1-403c-9391-bf8396979149","Magic Carpets of Aladdin","Adventureland",28.41843,-81.583472,2,"magic carpets"],
+ ["273ddb8d-e7b5-4e34-8657-1113f49262a5","Prince Charming Regal Carrousel","Fantasyland",28.420169,-81.581255,2,"regal carrousel"],
+ ["6fd1e225-53a0-4a80-a577-4bbc9a471075","Enchanted Tiki Room","Adventureland",28.4182264646,-81.583738382,12,"tiki room"],
+ ["0f57cecf-5502-4503-8bc3-ba84d3708ace","Country Bear Musical Jamboree","Frontierland",28.4187861348,-81.5837222887,16,"country bear"],
+ ["2ebfb38c-5cb5-4de1-86c0-f7af14188022","The Hall of Presidents","Liberty Square",28.4194484171,-81.5823248578,23,"hall of presidents"],
+ ["8183f3f2-1b59-4b9c-b634-6a863bdf8d84","Carousel of Progress","Tomorrowland",28.4180310951,-81.5790083064,21,"carousel of progress"],
+ ["30fe3c64-af71-4c66-a54b-aa61fd7af177","Swiss Family Treehouse","Adventureland",28.4184325517,-81.5827982677,15,"swiss family"],
+ ["e76c93df-31af-49a5-8e2f-752c76c937c9","Enchanted Tales with Belle","Fantasyland",28.4209906,-81.58093,20,"tales with belle"],
+ ["888fb4a4-7adf-47a1-8ba2-c258cc64fd75","Main Street Vehicles","Main Street, U.S.A.",28.4168698711,-81.5815081252,5,"main street vehicles"],
+ ["e39b831b-7731-49bb-815b-289b4f49a9fd","Walt Disney World Railroad","Main Street, U.S.A.",28.416543,-81.581204,20,"walt disney world railroad"]
+].map(a=>({id:a[0],name:a[1],land:a[2],lat:a[3],lon:a[4],dur:a[5],key:a[6]}));
+const BYID = Object.fromEntries(RIDES.map(r=>[r.id,r]));
+const ENTRANCE = {id:"entrance",name:"Park entrance",land:"Main Street, U.S.A.",lat:28.4161,lon:-81.5812};
+const LANDS = ["Main Street, U.S.A.","Adventureland","Frontierland","Liberty Square","Fantasyland","Tomorrowland"];
+const DEFAULT_ORDER = RIDES.map(r=>r.id);
+
+// Typical standby wait by hour, 8 AM through 10 PM (15 values).
+// Source: ThemeParks.wiki forecasts for Sat Oct 10 and Sun Oct 11, 2026, averaged.
+// Buzz Lightyear and Big Thunder publish no forecast; their curves are estimated from posted waits.
+const H0 = 8;
+const HIST = {
+ "5a43d1a7-ad53-4d25-abfe-25625f0da304":[45,75,60,65,65,65,65,75,80,80,85,85,90,85,100],
+ "9d4d5229-7142-44b6-b4fb-528920969a2c":[40,40,45,60,60,60,60,55,60,60,65,65,70,45,35],
+ "b2260923-9315-40fd-9c6b-44dd811dbe64":[15,25,45,50,55,50,45,45,50,45,45,45,30,25,25],
+ "de3309ca-97d5-4211-bffe-739fed47e92f":[10,20,35,45,50,50,50,50,50,50,50,45,30,20,15],
+ "73cb9445-0695-47a3-87ce-d08ae36b5f3c":[10,15,35,45,55,60,60,60,60,60,60,60,50,40,15],
+ "86a41273-5f15-4b54-93b6-829f140e5161":[30,35,40,50,50,50,50,50,50,50,50,50,50,30,25],
+ "2551a77d-023f-4ab1-9a19-8afec0190f39":[15,15,25,35,40,35,35,35,40,40,40,30,20,20,15],
+ "352feb94-e52e-45eb-9c92-e4b44c6b1a9d":[5,10,15,30,40,30,30,30,30,30,30,30,20,10,10],
+ "796b0a25-c51e-456e-9bb8-50a324e301b3":[10,20,40,45,45,45,45,45,45,45,45,45,25,15,10],
+ "72c7343a-f7fb-4f66-95df-c91016de7338":[15,20,35,40,45,45,45,45,45,45,45,40,30,25,20],
+ "3cba0cb4-e2a6-402c-93ee-c11ffcb127ef":[5,5,10,20,25,30,30,25,30,30,30,30,25,5,5],
+ "0d94ad60-72f0-4551-83a6-ebaecdd89737":[25,30,30,40,40,40,40,40,40,40,40,40,35,30,12],
+ "f5aad2d4-a419-4384-bd9a-42f86385c750":[5,10,10,20,25,25,25,25,25,25,25,15,10,10,5],
+ "ffcfeaa2-1416-4920-a1ed-543c1a1695c4":[5,5,5,10,15,20,10,10,20,20,20,20,20,10,5],
+ "f163ddcd-43e1-488d-8276-2381c1db0a39":[10,20,20,20,20,20,20,20,20,20,20,25,20,15,15],
+ "e8f0b426-7645-4ea3-8b41-b94ae7091a41":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,0],
+ "7c5e1e02-3a44-4151-9005-44066d5ba1da":[15,15,15,15,15,15,15,15,15,15,15,15,15,15,15],
+ "d9d12438-d999-4482-894b-8955fdb20ccf":[10,10,15,25,25,20,15,15,15,25,25,30,25,10,10],
+ "0aae716c-af13-4439-b638-d75fb1649df3":[5,5,10,15,20,20,15,15,15,15,15,15,10,10,5],
+ "890fa430-89c0-4a3f-96c9-11597888005e":[5,10,10,15,20,20,10,10,10,20,20,20,30,15,10],
+ "924a3b2c-6b4b-49e5-99d3-e9dc3f2e8a48":[5,5,10,20,20,20,20,20,20,20,30,30,25,10,5],
+ "96455de6-f4f1-403c-9391-bf8396979149":[5,10,15,20,20,15,10,10,15,15,20,20,15,5,5],
+ "273ddb8d-e7b5-4e34-8657-1113f49262a5":[5,5,5,10,10,10,10,10,10,10,10,10,15,10,10],
+ "6fd1e225-53a0-4a80-a577-4bbc9a471075":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,10],
+ "0f57cecf-5502-4503-8bc3-ba84d3708ace":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,10],
+ "2ebfb38c-5cb5-4de1-86c0-f7af14188022":[0,15,15,15,15,15,15,15,15,15,15,15,15,0,0],
+ "30fe3c64-af71-4c66-a54b-aa61fd7af177":[5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+ "e76c93df-31af-49a5-8e2f-752c76c937c9":[0,0,15,15,15,15,15,15,15,15,15,15,0,0,0]
+};
+
+// ---------- state ----------
+let firstRun=false;
+function defaults(){return {picked:DEFAULT_ORDER.slice(0,MAX_PICKS),loc:"entrance",autoLoc:true,log:[],snooze:{},pace:"normal",useForecast:true,reride:false,tab:"plan"};}
+function load(){
+  let s=defaults(),raw=null;
+  try{raw=localStorage.getItem(STORE);}catch(e){}
+  if(raw){try{s=Object.assign(s,JSON.parse(raw));}catch(e){}}else firstRun=true;
+  const known=new Set(DEFAULT_ORDER);
+  if(!Array.isArray(s.picked))s.picked=DEFAULT_ORDER.slice(0,MAX_PICKS);
+  s.picked=s.picked.filter((id,i,a)=>known.has(id)&&a.indexOf(id)===i);
+  if(!Array.isArray(s.log))s.log=[];
+  s.log=s.log.filter(x=>x&&known.has(x.id));
+  delete s.order;delete s.skip;delete s.sampleEdits;
+  if(s.loc!=="entrance"&&!BYID[s.loc])s.loc="entrance";
+  if(!PACES[s.pace])s.pace="normal";
+  return s;
+}
+let storageOK=true;
+function save(){try{localStorage.setItem(STORE,JSON.stringify(S));storageOK=true;}catch(e){storageOK=false;}}
+let S=load();
+
+// mode: loading | live | cached (recent live data) | history (typical waits)
+let L={mode:"loading",at:null,by:{},src:"",err:null,errMsg:"",fetching:false,lastTry:0,nextAt:0,fails:0};
+let cspBlocked=false;
+document.addEventListener("securitypolicyviolation",e=>{
+  const u=String(e.blockedURI||"");
+  if(u.indexOf("themeparks.wiki")>=0||u.indexOf("queue-times.com")>=0)cspBlocked=true;
+});
+
+// ---------- helpers ----------
+const $=id=>document.getElementById(id);
+function clamp(x,lo,hi){return Math.min(hi,Math.max(lo,x));}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);}
+function fmtTime(t){return new Date(t).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});}
+function fmtHour(t){return new Date(t).toLocaleTimeString([],{hour:"numeric"});}
+function sameDay(t){const a=new Date(t),b=new Date();return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function todayAt(h){const d=new Date();d.setHours(h,0,0,0);return d.getTime();}
+function round5(x){return Math.max(0,Math.round(x/5)*5);}
+function norm(s){return " "+String(s).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()+" ";}
+function median(a){if(!a.length)return null;const s=a.slice().sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;}
+
+// ---------- history (typical waits) ----------
+function curveAt(id,t){
+  const c=HIST[id];if(!c)return null;
+  const d=new Date(t),h=clamp(d.getHours()+d.getMinutes()/60-H0,0,c.length-1);
+  const a=Math.floor(h),b=Math.min(c.length-1,a+1),f=h-a;
+  return c[a]*(1-f)+c[b]*f;
+}
+function histForecast(id,k){return HIST[id]?HIST[id].map((w,i)=>({t:todayAt(H0+i),w:round5(w*k)})):[];}
+// How today's real waits compare with the typical curve, per ride, from a set of observations.
+function ratiosFrom(by,at){
+  const out={};
+  for(const id in by){
+    const d=by[id],base=curveAt(id,at);
+    if(d&&d.status==="OPERATING"&&d.wait!=null&&base!=null&&base>=8)out[id]=clamp(d.wait/base,0.6,1.8);
+  }
+  return out;
+}
+function historyData(){
+  const c=readCache(),today=c&&sameDay(c.at);
+  const ratios=today?ratiosFrom(c.by,c.at):{};
+  const globalK=median(Object.values(ratios))||1;
+  const by={};
+  for(const r of RIDES){
+    if(!HIST[r.id]){by[r.id]={status:"UNKNOWN",wait:null,end:null,fc:[],est:true};continue;}
+    const cached=today?c.by[r.id]:null;
+    let status="OPERATING";
+    if(cached&&(cached.status==="REFURBISHMENT"||cached.status==="CLOSED"))status=cached.status;
+    const k=ratios[r.id]||globalK;
+    by[r.id]={status,wait:round5(curveAt(r.id,Date.now())*k),end:today&&cached?cached.end:null,fc:histForecast(r.id,k),est:true};
+  }
+  return {by,calibrated:today&&Object.keys(ratios).length>0};
+}
+
+// ---------- live data ----------
+function readCache(){
+  try{const c=JSON.parse(localStorage.getItem(CACHE)||"null");if(c&&c.at&&c.by&&Date.now()-c.at<18*3600000)return c;}catch(e){}
+  return null;
+}
+function writeCache(){try{localStorage.setItem(CACHE,JSON.stringify({at:L.at,by:L.by,src:L.src}));}catch(e){}}
+async function fetchJSON(url){
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),12000);
+  try{
+    const res=await fetch(url,{signal:ctl.signal,cache:"no-store"});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    return await res.json();
+  }finally{clearTimeout(tm);}
+}
+function parseTPW(j){
+  const by={};
+  for(const e of (j.liveData||[])){
+    if(!BYID[e.id])continue;
+    const op=(e.operatingHours||[]).filter(h=>h.type==="Operating");
+    const end=op.length?Date.parse(op[op.length-1].endTime):NaN;
+    const q=e.queue&&e.queue.STANDBY;
+    const wait=q&&typeof q.waitTime==="number"?q.waitTime:null;
+    let fc=(e.forecast||[]).map(f=>({t:Date.parse(f.time),w:f.waitTime})).filter(f=>!isNaN(f.t)&&typeof f.w==="number");
+    if(!fc.length&&HIST[e.id]){ // no published forecast: use the typical curve scaled to the live wait
+      const base=curveAt(e.id,Date.now());
+      fc=histForecast(e.id,wait!=null&&base>=8?clamp(wait/base,0.6,1.8):1);
+    }
+    by[e.id]={status:e.status,wait,end:isNaN(end)?null:end,fc};
+  }
+  return by;
+}
+function parseQT(j){
+  const list=[].concat(j.rides||[]);
+  (j.lands||[]).forEach(l=>list.push(...(l.rides||[])));
+  const by={};
+  for(const r of RIDES){
+    const m=list.find(x=>norm(x.name).indexOf(" "+r.key+" ")>=0);
+    if(!m)continue;
+    const open=!!m.is_open,wait=open&&typeof m.wait_time==="number"?m.wait_time:null;
+    const base=curveAt(r.id,Date.now());
+    by[r.id]={status:open?"OPERATING":"CLOSED",wait,end:null,fc:histForecast(r.id,wait!=null&&base>=8?clamp(wait/base,0.6,1.8):1)};
+  }
+  return by;
+}
+let timer=null;
+function schedule(ms){clearTimeout(timer);L.nextAt=Date.now()+ms;timer=setTimeout(refresh,ms);}
+async function refresh(){
+  if(L.fetching)return;
+  const before=topPick();
+  L.fetching=true;L.lastTry=Date.now();setPill();
+  try{
+    let by,src;
+    try{by=parseTPW(await fetchJSON(SRC_TPW));src="ThemeParks.wiki";if(Object.keys(by).length<5)throw new Error("Too little data");}
+    catch(e1){by=parseQT(await fetchJSON(SRC_QT));src="Queue-Times.com";if(Object.keys(by).length<5)throw e1;}
+    L.mode="live";L.at=Date.now();L.by=by;L.src=src;L.err=null;L.errMsg="";L.fails=0;
+    writeCache();
+    schedule(REFRESH_MS);
+  }catch(err){
+    await new Promise(r=>setTimeout(r,60)); // let a blocked-request event arrive first
+    L.fails++;
+    L.err=cspBlocked?"blocked":navigator.onLine===false?"offline":(err&&err.name==="AbortError")?"timeout":"failed";
+    L.errMsg=err&&err.message?String(err.message):"";
+    useFallback();
+    schedule(L.err==="blocked"?REFRESH_MS:Math.min(REFRESH_MS,30000*Math.pow(2,L.fails-1)));
+  }finally{
+    L.fetching=false;
+    noteChange(before);
+    render();
+  }
+}
+function useFallback(){
+  const c=readCache();
+  if(c&&Date.now()-c.at<FRESH_CACHE_MS){L.mode="cached";L.at=c.at;L.by=c.by;L.src=c.src||"";}
+  else{const h=historyData();L.mode="history";L.at=Date.now();L.by=h.by;L.calibrated=h.calibrated;}
+}
+
+// ---------- location ----------
+let G=null,gpsState="off",watchId=null,lastRenderPos=null;
+function inPark(p){return p.lat>PARK_BOX.s&&p.lat<PARK_BOX.n&&p.lon>PARK_BOX.w&&p.lon<PARK_BOX.e;}
+function startGPS(){
+  if(!S.autoLoc){gpsState="off";return;}
+  if(!("geolocation" in navigator)){gpsState="unavailable";return;}
+  if(watchId!=null)return;
+  gpsState="asking";
+  try{
+    watchId=navigator.geolocation.watchPosition(pos=>{
+      const p={id:"gps",name:"Your location",lat:pos.coords.latitude,lon:pos.coords.longitude,acc:Math.round(pos.coords.accuracy||0),at:Date.now()};
+      const prevState=gpsState;
+      G=p;gpsState=inPark(p)?"on":"outside";
+      if(prevState!==gpsState||!lastRenderPos||meters(lastRenderPos,p)>25){lastRenderPos=p;render();}
+    },err=>{
+      gpsState=err&&err.code===1?"denied":"unavailable";
+      if(watchId!=null){try{navigator.geolocation.clearWatch(watchId);}catch(e){}watchId=null;}
+      render();
+    },{enableHighAccuracy:true,maximumAge:30000,timeout:20000});
+  }catch(e){gpsState="unavailable";}
+}
+function stopGPS(){if(watchId!=null){try{navigator.geolocation.clearWatch(watchId);}catch(e){}}watchId=null;G=null;gpsState="off";}
+function usingGPS(){return S.autoLoc&&gpsState==="on"&&G&&Date.now()-G.at<10*60000;}
+function place(id){return id==="entrance"?ENTRANCE:BYID[id];}
+function here(){return usingGPS()?G:place(S.loc);}
+function nearestRide(p){let best=null,bd=Infinity;for(const r of RIDES){const d=meters(p,r);if(d<bd){bd=d;best=r;}}return {r:best,d:bd};}
+
+// ---------- scoring ----------
+function meters(a,b){
+  const R=6371000,toR=Math.PI/180;
+  const dLat=(b.lat-a.lat)*toR,dLon=(b.lon-a.lon)*toR;
+  const h=Math.sin(dLat/2)**2+Math.cos(a.lat*toR)*Math.cos(b.lat*toR)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function walkMin(a,b){if(a.id===b.id)return 0;return Math.max(1,Math.round(meters(a,b)*PATH_FACTOR/PACES[S.pace]));}
+function forecastAt(d,t){let best=null;for(const f of d.fc){if(f.t<=t&&t-f.t<3600000)best=f.w;}return best;}
+function trend(d,t,wait){
+  const fut=d.fc.filter(f=>f.t>t);
+  if(!fut.length)return 1;
+  const avg=fut.reduce((s,f)=>s+f.w,0)/fut.length;
+  return clamp((avg+5)/(wait+5),0.8,1.3);
+}
+function weights(){
+  const act=S.picked,n=act.length,w={},rank={};
+  act.forEach((id,i)=>{w[id]=n<=1?3:1+2*(n-1-i)/(n-1);rank[id]=i+1;});
+  return {w,rank,n};
+}
+function statusLabel(d){
+  if(!d)return "No data";
+  return ({DOWN:"Down",CLOSED:"Closed",REFURBISHMENT:"Refurb",UNKNOWN:"No data"})[d.status]||"Closed";
+}
+function ridden(){return new Set(S.log.map(x=>x.id));}
+function evaluate(from,t,done,first){
+  const {w,rank}=weights(),out=[];
+  for(const id of S.picked){
+    const r=BYID[id],d=L.by[id];
+    const walk=walkMin(from,r);
+    let ok=true,why="";
+    if(!d||d.status!=="OPERATING"){ok=false;why=statusLabel(d);}
+    else if(done.has(id)&&!S.reride){ok=false;why="Already ridden";}
+    else if(first&&(S.snooze[id]||0)>Date.now()){ok=false;why="Skipped for now";}
+    let wait=d&&d.wait!=null?d.wait:5,est=!!(d&&d.est);
+    if(ok&&!first&&S.useForecast){const f=forecastAt(d,t+walk*60000);if(f!=null){wait=f;est=true;}}
+    if(ok&&d.end&&t+(walk+wait)*60000>d.end){ok=false;why="Closes first";}
+    const total=walk+wait+r.dur;
+    const tr=ok&&S.useForecast?trend(d,t+walk*60000,wait):1;
+    const rr=done.has(id)?0.5:1;
+    const score=ok?w[id]*tr*rr/Math.max(total,1)*60:-1;
+    out.push({id,r,d,walk,wait,est,total,tr,w:w[id],rank:rank[id],rr,score,ok,why,noPost:!!(d&&d.status==="OPERATING"&&d.wait==null)});
+  }
+  return out.sort((a,b)=>b.score-a.score);
+}
+function plan(steps){
+  let loc=here(),t=Date.now();
+  const done=ridden(),out=[];
+  for(let i=0;i<steps;i++){
+    const c=evaluate(loc,t,done,i===0).filter(x=>x.ok);
+    if(!c.length)break;
+    const p=c[0],start=t;
+    t+=p.total*60000;
+    out.push(Object.assign({},p,{start,board:start+(p.walk+p.wait)*60000,finish:t}));
+    done.add(p.id);loc=p.r;
+  }
+  return out;
+}
+function topPick(){if(!S.picked.length||L.mode==="loading")return null;const c=evaluate(here(),Date.now(),ridden(),true).filter(x=>x.ok);return c[0]?{id:c[0].id,wait:c[0].wait}:null;}
+let change=null; // {text, at}
+function noteChange(before){
+  const now=topPick();
+  if(before&&now&&before.id!==now.id){
+    change={at:Date.now(),text:"Plan updated at "+fmtTime(Date.now())+": was "+BYID[before.id].name+". "+BYID[now.id].name+" is now the better move ("+now.wait+" min wait)."};
+  }
+}
+function outlook(d){
+  if(!d||!d.fc||!d.fc.length)return null;
+  const now=Date.now(),end=d.end||Infinity;
+  const fut=d.fc.filter(f=>f.t>now+30*60000&&f.t<end);
+  if(!fut.length)return null;
+  let lo=fut[0],hi=fut[0];
+  for(const f of fut){if(f.w<lo.w)lo=f;if(f.w>hi.w)hi=f;}
+  return {lo,hi};
+}
+function verdict(p,top){
+  if(!p.ok)return {cls:"off",text:p.why};
+  if(top&&p.id===top.id)return {cls:"best",text:"Ride next"};
+  const o=outlook(p.d);
+  if(o&&o.lo.w<=p.wait-15)return {cls:"later",text:"Better later",note:"Forecast drops to ~"+o.lo.w+" min around "+fmtHour(o.lo.t)+"."};
+  if(top&&p.score>=top.score*0.8)return {cls:"backup",text:"Strong backup",note:"Within "+Math.round((1-p.score/top.score)*100)+"% of the top pick."};
+  if(p.wait>=45)return {cls:"long",text:"Long line",note:o?"Lowest forecast today: ~"+o.lo.w+" min around "+fmtHour(o.lo.t)+".":""};
+  return {cls:"long",text:"Low value now",note:"Too much time for its priority right now."};
+}
+
+// ---------- render ----------
+function waitClass(w){return w<=20?"go":w<=45?"warn":"stop";}
+function waitChip(d){
+  if(!d||d.status!=="OPERATING")return '<span class="w off">'+esc(statusLabel(d))+"</span>";
+  if(d.wait==null)return '<span class="w go num" title="No posted wait">—</span>';
+  return '<span class="w num '+waitClass(d.wait)+'"'+(d.est?' title="Typical wait"':'')+'>'+(d.est?"~":"")+d.wait+"</span>";
+}
+function agoText(t){const m=Math.round((Date.now()-t)/60000);return m<1?"just now":m<60?m+" min ago":fmtTime(t);}
+function setPill(){
+  const p=$("pill"),tx=$("pillText");
+  p.className="pill";
+  if(L.fetching){p.classList.add("busy");tx.textContent="Refreshing…";}
+  else if(L.mode==="live"){p.classList.add("live");tx.textContent="Live · "+agoText(L.at);}
+  else if(L.mode==="cached"){p.classList.add("cached");tx.textContent="Saved · "+fmtTime(L.at);}
+  else if(L.mode==="history"){p.classList.add("sample");tx.textContent="Typical waits";}
+  else tx.textContent="Loading…";
+  const rl=$("refreshLine");
+  if(L.fetching||!L.nextAt){rl.textContent="";return;}
+  const s=Math.max(0,Math.round((L.nextAt-Date.now())/1000));
+  rl.textContent=(L.err?"Retrying live data in ":"Next refresh in ")+(s<60?s+" sec":Math.round(s/60)+" min");
+}
+function renderBanner(){
+  const b=$("banner");
+  if(!L.err||L.mode==="live"){
+    if(!storageOK){b.hidden=false;b.innerHTML="<b>This browser isn't letting the page save.</b> Your list and ride log will reset when you close it. Private Browsing does this; open the page in a normal Safari tab.";return;}
+    b.hidden=true;return;
+  }
+  const showing=L.mode==="cached"
+    ?"Using the live waits from "+fmtTime(L.at)+" for now."
+    :"Using typical waits for this time of day"+(L.calibrated?", adjusted to today's last live reading":"")+". Treat them as estimates.";
+  const why={
+    blocked:"<b>This viewer blocks live data.</b> The Claude app doesn't let pages fetch wait times or use GPS. Open the planner's web link in Safari instead.",
+    offline:"<b>No signal.</b> Live waits come back on their own when you reconnect.",
+    timeout:"<b>The wait-time services are slow to answer.</b> Retrying automatically.",
+    failed:"<b>Live waits didn't load"+(L.errMsg&&/HTTP/.test(L.errMsg)?" ("+esc(L.errMsg)+")":"")+".</b> Retrying automatically."
+  }[L.err];
+  b.hidden=false;
+  b.innerHTML=why+" "+showing+(L.err==="blocked"?"":'<br><button class="btn sm" id="retryNow">Retry now</button>');
+  const r=$("retryNow");if(r)r.onclick=refresh;
+}
+function renderLocation(){
+  const line=$("gpsLine"),tx=$("gpsText");
+  $("gpsToggle").checked=S.autoLoc;
+  line.className="gps-line";
+  let showPicker=true;
+  if(usingGPS()){
+    const n=nearestRide(G);
+    line.classList.add("on");
+    tx.textContent="Using GPS · near "+n.r.name+(G.acc?" (±"+G.acc+" m)":"");
+    showPicker=false;
+  }else if(!S.autoLoc){tx.textContent="Auto location is off. Pick where you are, or it follows your last ride.";}
+  else if(gpsState==="asking"){line.classList.add("warn");tx.textContent="Finding your location…";}
+  else if(gpsState==="outside"){line.classList.add("warn");tx.textContent="GPS says you're outside the park, so planning from the spot below.";}
+  else if(gpsState==="denied"){line.classList.add("warn");tx.textContent="Location access is off for this site. Allow it in Settings › Privacy › Location Services › Safari, or pick where you are.";}
+  else {line.classList.add("warn");tx.textContent="GPS isn't available here. Pick where you are, or it follows your last ride.";}
+  $("locRow").hidden=!showPicker;
+  $("locSel").value=S.loc;
+}
+function renderNext(path){
+  const el=$("next");
+  if(!path.length){
+    const none=!S.picked.length;
+    el.innerHTML='<div class="eyebrow">Next ride</div><div class="name">'+(none?"Pick your rides":"Nothing on your list is open")+'</div>'+
+      '<p class="why muted" style="margin:0">'+(none?"Check up to 10 rides and rank them, and this card tells you which to ride next.":"Everything on your list is closed, down, skipped for now, or already ridden. Add more rides to your list or refresh.")+'</p>'+
+      '<div class="actions"><button class="btn primary" id="goPick">'+(none?"Pick rides":"Add rides")+'</button></div>';
+    $("goPick").onclick=()=>{S.tab="prio";save();render();};
+    return;
+  }
+  const p=path[0],{n}=weights();
+  const rivals=evaluate(here(),Date.now(),ridden(),true).filter(x=>x.ok&&x.id!==p.id);
+  const second=rivals[0];
+  const o=outlook(p.d);
+  let timing;
+  if(!S.useForecast)timing="Forecasts off · ×1.00";
+  else if(!o)timing="No forecast for this ride · ×1.00";
+  else if(p.tr>=1.03)timing="Line forecast to grow (up to ~"+o.hi.w+" min around "+fmtHour(o.hi.t)+") · <b>×"+p.tr.toFixed(2)+" ride-now bonus</b>";
+  else if(p.tr<=0.97)timing="Forecast drops to ~"+o.lo.w+" min around "+fmtHour(o.lo.t)+" · ×"+p.tr.toFixed(2)+", still the best move now";
+  else timing="Line expected to hold steady · ×"+p.tr.toFixed(2);
+  const fromTxt=usingGPS()?"your GPS position":(place(S.loc).name);
+  const math='<dl class="math num">'+
+    '<dt>Priority</dt><dd><b>#'+p.rank+'</b> of '+n+' → weight '+p.w.toFixed(1)+(p.rr<1?' (re-ride, halved)':'')+'</dd>'+
+    '<dt>Time</dt><dd>'+p.walk+' walk from '+esc(fromTxt)+' + '+(p.est?'~':'')+p.wait+' wait + '+p.r.dur+' ride = <b>'+p.total+' min</b>'+(p.est?' <span class="est">typical wait</span>':'')+'</dd>'+
+    '<dt>Timing</dt><dd>'+timing+'</dd>'+
+    '<dt>Score</dt><dd>'+p.w.toFixed(1)+' × '+p.tr.toFixed(2)+(p.rr<1?' × 0.5':'')+' ÷ '+p.total+' min × 60 = <b>'+p.score.toFixed(1)+' pts/hr</b></dd>'+
+    (second?'<dt>Next best</dt><dd>'+esc(second.r.name)+' at '+second.score.toFixed(1)+' · this pick is <b>'+Math.round((p.score/second.score-1)*100)+'% better</b></dd>':'')+
+  '</dl>';
+  const chg=change&&Date.now()-change.at<20*60000?'<div class="change">'+esc(change.text)+'</div>':'';
+  el.innerHTML=chg+
+    '<div><div class="eyebrow">Next ride · '+esc(p.r.land)+'</div><div class="name">'+esc(p.r.name)+'</div>'+
+    '<div class="land">Board around '+fmtTime(p.board)+' · off by '+fmtTime(p.finish)+(p.noPost?' · no posted wait, assuming 5':'')+'</div></div>'+
+    '<div class="stats num">'+
+      '<div class="stat"><div class="v" style="color:var(--'+waitClass(p.wait)+')">'+(p.est?'~':'')+p.wait+'<small>m</small></div><div class="k">Wait</div></div>'+
+      '<div class="stat"><div class="v">'+p.walk+'<small>m</small></div><div class="k">Walk</div></div>'+
+      '<div class="stat"><div class="v">'+p.r.dur+'<small>m</small></div><div class="k">Ride</div></div>'+
+      '<div class="stat"><div class="v">'+p.score.toFixed(1)+'</div><div class="k">Pts / hr</div></div>'+
+    '</div>'+math+
+    '<div class="actions"><button class="btn primary" id="rodeBtn">I rode it</button><button class="btn" id="snoozeBtn">Skip 30 min</button></div>';
+  $("rodeBtn").onclick=()=>logRide(p.id);
+  $("snoozeBtn").onclick=()=>{S.snooze[p.id]=Date.now()+30*60000;save();render();};
+}
+function renderBoard(path){
+  const all=evaluate(here(),Date.now(),ridden(),true);
+  $("boardCard").hidden=!all.length;
+  const top=path[0]||null;
+  $("board").innerHTML=all.map(p=>{
+    const v=verdict(p,top),isTop=top&&p.id===top.id;
+    const pct=p.ok&&top?Math.max(4,Math.round(p.score/top.score*100)):0;
+    const meta=p.ok
+      ?(p.est?'~':'')+p.wait+' wait · '+p.walk+' walk · '+p.r.dur+' ride = '+p.total+' min'+(p.noPost?' (no posted wait)':'')
+      :esc(p.r.land);
+    return '<li class="brow'+(isTop?' top':'')+(p.ok?'':' na')+'">'+
+      '<span class="prank num" title="Priority rank">#'+p.rank+'</span>'+
+      '<div style="min-width:0"><div class="cname">'+esc(p.r.name)+'</div><div class="cmeta num">'+meta+'</div></div>'+
+      (p.ok?'<div class="bscore num">'+p.score.toFixed(1)+'<small>pts/hr</small></div>':waitChip(p.d))+
+      (p.ok?'<div class="bar" aria-hidden="true"><span style="width:'+pct+'%"></span></div>':'')+
+      '<div class="bnote"><span class="verdict v-'+v.cls+'">'+esc(v.text)+'</span>'+(v.note?esc(v.note):'')+'</div>'+
+    '</li>';
+  }).join("");
+}
+function chainRow(lead,p,meta){
+  return '<li><span class="eta num">'+lead+'</span><div style="min-width:0"><div class="cname">'+esc(p.r.name)+'</div><div class="cmeta num">'+meta+'</div></div>'+
+    '<span class="w num '+waitClass(p.wait)+'">'+(p.est?'~':'')+p.wait+'</span></li>';
+}
+function renderThen(path){
+  const rows=path.slice(1);
+  $("thenCard").hidden=!rows.length;
+  $("then").innerHTML=rows.map(p=>chainRow(fmtTime(p.start),p,p.walk+" min walk · "+(p.est?"forecast ":"current ")+"wait · off by "+fmtTime(p.finish))).join("");
+}
+function openPicks(){const r=ridden();return S.picked.filter(id=>!r.has(id)).length;}
+const GRIP='<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+function renderPrio(){
+  const {rank}=weights();
+  const done=ridden(),open=openPicks(),full=open>=MAX_PICKS;
+  $("slotCount").textContent=open+" / "+MAX_PICKS;
+  $("clearList").hidden=!S.picked.length;
+  $("shareList").hidden=!S.picked.length;
+  $("plist").innerHTML=S.picked.length?S.picked.map(id=>{
+    const r=BYID[id],dn=done.has(id);
+    return '<li class="prow'+(dn?" done":"")+'" data-id="'+id+'">'+
+      '<button class="handle" data-handle="'+id+'" aria-label="Reorder '+esc(r.name)+'. Use arrow keys to move.">'+GRIP+'</button>'+
+      '<span class="rank num">'+rank[id]+'</span>'+
+      '<div style="min-width:0"><div class="pname">'+esc(r.name)+(dn?'<span class="tag">Done</span>':'')+'</div><div class="cmeta">'+esc(r.land)+'</div></div>'+
+      waitChip(L.by[id])+
+      '<button class="icon-btn" data-remove="'+id+'" aria-label="Remove '+esc(r.name)+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'+
+    '</li>';
+  }).join(""):'<li class="empty">No rides yet. Check some below.</li>';
+  const picked=new Set(S.picked);
+  $("picker").innerHTML=LANDS.map(l=>{
+    const rows=RIDES.filter(r=>r.land===l).map(r=>{
+      const on=picked.has(r.id),dis=!on&&full;
+      return '<div class="pick'+(dis?" disabled":"")+'"><label><input type="checkbox" id="p-'+r.id+'" data-pick="'+r.id+'"'+(on?" checked":"")+(dis?" disabled":"")+'><span>'+esc(r.name)+(done.has(r.id)?'<span class="tag">Done</span>':'')+'</span></label>'+waitChip(L.by[r.id])+'</div>';
+    }).join("");
+    return '<div class="landhead">'+esc(l)+'</div>'+rows;
+  }).join("")+(full?'<p class="small muted" style="margin:10px 0 0">Your list is full. Remove a ride, or ride one, to free a slot.</p>':'');
+  document.querySelectorAll("#paceSeg button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.pace===S.pace)));
+  $("fcToggle").checked=S.useForecast;
+  $("rerideToggle").checked=S.reride;
+}
+function renderDay(){
+  $("count").textContent=S.log.length;
+  $("undo").disabled=!S.log.length;
+  $("log").innerHTML=S.log.length
+    ?S.log.slice().reverse().map(x=>'<div class="logrow"><span class="eta num">'+fmtTime(x.t)+'</span><span class="cname">'+esc(BYID[x.id].name)+'</span></div>').join("")
+    :'<p class="small muted" style="margin:0">Tap "I rode it" on the Next ride card and your rides land here.</p>';
+}
+function renderSelects(){
+  const groups=LANDS.map(l=>'<optgroup label="'+esc(l)+'">'+RIDES.filter(r=>r.land===l).map(r=>'<option value="'+r.id+'">'+esc(r.name)+'</option>').join("")+'</optgroup>').join("");
+  $("locSel").innerHTML='<option value="entrance">Park entrance</option>'+groups;
+  $("addSel").innerHTML=groups;
+}
+function render(){
+  setPill();renderBanner();renderLocation();
+  const path=S.picked.length&&L.mode!=="loading"?plan(4):[];
+  if(L.mode==="loading"&&S.picked.length){
+    $("next").innerHTML='<div class="eyebrow">Next ride</div><div class="name">Checking wait times…</div>';
+    $("boardCard").hidden=true;$("thenCard").hidden=true;
+  }else{renderNext(path);renderBoard(path);renderThen(path);}
+  renderPrio();renderDay();
+  ["plan","prio","day"].forEach(t=>{
+    $("panel-"+t).hidden=S.tab!==t;
+    $("tab-"+t).setAttribute("aria-selected",String(S.tab===t));
+  });
+}
+
+// ---------- shared lists ----------
+function listToken(ids){return "list-"+ids.map(id=>DEFAULT_ORDER.indexOf(id).toString(36)).join("-");}
+function parseListToken(h){
+  const m=/^#?list-([0-9a-z]+(?:-[0-9a-z]+)*)$/.exec(h||"");
+  if(!m)return null;
+  const ids=m[1].split("-").map(x=>DEFAULT_ORDER[parseInt(x,36)]).filter(Boolean);
+  const uniq=ids.filter((id,i)=>ids.indexOf(id)===i).slice(0,MAX_PICKS);
+  return uniq.length?uniq:null;
+}
+function clearHash(){try{history.replaceState(null,"",location.pathname+location.search);}catch(e){}}
+function handleSharedList(){
+  const ids=parseListToken(location.hash);
+  if(!ids)return;
+  if(firstRun||!S.picked.length){S.picked=ids;save();clearHash();return;}
+  if(ids.join()===S.picked.join()){clearHash();return;}
+  const b=$("importBanner");
+  b.hidden=false;
+  b.innerHTML='<b>Someone shared a ride list with you.</b> '+esc(ids.map((id,i)=>(i+1)+". "+BYID[id].name).join(", "))+
+    '<div class="actions" style="margin-top:8px"><button class="btn sm primary" id="useShared" style="flex:0 0 auto">Use this list</button><button class="btn sm" id="keepMine">Keep mine</button></div>';
+  $("useShared").onclick=()=>{S.picked=ids;save();b.hidden=true;clearHash();render();};
+  $("keepMine").onclick=()=>{b.hidden=true;clearHash();};
+}
+async function shareList(){
+  const url=location.href.split("#")[0]+"#"+listToken(S.picked);
+  const box=$("shareBox"),msg=$("shareMsg"),inp=$("shareUrl");
+  inp.value=url;box.hidden=false;
+  if(navigator.share){
+    try{await navigator.share({title:"My Magic Kingdom ride list",text:"Here's my ride list for the Ride Planner:",url});msg.textContent="Shared. Anyone who opens the link gets the planner with your list.";return;}
+    catch(e){if(e&&e.name==="AbortError"){msg.textContent="Share canceled. You can copy the link below.";return;}}
+  }
+  try{await navigator.clipboard.writeText(url);msg.textContent="Link copied. Anyone who opens it gets the planner with your list.";}
+  catch(e){msg.textContent="Copy this link and send it:";inp.focus();inp.select();}
+}
+
+// ---------- actions ----------
+function logRide(id){S.log.push({id,t:Date.now()});S.loc=id;delete S.snooze[id];save();render();window.scrollTo({top:0,behavior:"smooth"});}
+document.querySelector(".tabs").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(!b)return;S.tab=b.dataset.tab;save();render();});
+$("locSel").addEventListener("change",e=>{S.loc=e.target.value;save();render();});
+$("gpsToggle").addEventListener("change",e=>{S.autoLoc=e.target.checked;save();if(S.autoLoc)startGPS();else stopGPS();render();});
+$("refresh").addEventListener("click",refresh);
+$("shareList").addEventListener("click",shareList);
+$("shareUrl").addEventListener("focus",e=>e.target.select());
+const plist=$("plist");
+plist.addEventListener("click",e=>{
+  const b=e.target.closest("[data-remove]");if(!b)return;
+  S.picked=S.picked.filter(id=>id!==b.dataset.remove);save();render();
+});
+plist.addEventListener("keydown",e=>{
+  const h=e.target.closest("[data-handle]");if(!h)return;
+  const id=h.dataset.handle,i=S.picked.indexOf(id);
+  const j=e.key==="ArrowUp"?i-1:e.key==="ArrowDown"?i+1:-2;
+  if(j<0||j>=S.picked.length)return;
+  e.preventDefault();
+  S.picked.splice(i,1);S.picked.splice(j,0,id);save();render();
+  const nh=document.querySelector('[data-handle="'+id+'"]');if(nh)nh.focus();
+});
+let drag=null;
+plist.addEventListener("pointerdown",e=>{
+  const h=e.target.closest("[data-handle]");if(!h)return;
+  e.preventDefault();
+  try{h.setPointerCapture(e.pointerId);}catch(err){}
+  drag={li:h.closest("li")};drag.li.classList.add("dragging");
+});
+plist.addEventListener("pointermove",e=>{
+  if(!drag)return;
+  const li=drag.li,y=e.clientY,prev=li.previousElementSibling,next=li.nextElementSibling;
+  if(prev){const r=prev.getBoundingClientRect();if(y<r.top+r.height/2){plist.insertBefore(li,prev);return;}}
+  if(next){const r=next.getBoundingClientRect();if(y>r.top+r.height/2){plist.insertBefore(next,li);}}
+});
+function endDrag(){
+  if(!drag)return;
+  drag.li.classList.remove("dragging");drag=null;
+  S.picked=[...plist.querySelectorAll("li[data-id]")].map(li=>li.dataset.id);
+  save();render();
+}
+plist.addEventListener("pointerup",endDrag);
+plist.addEventListener("pointercancel",endDrag);
+$("picker").addEventListener("change",e=>{
+  const t=e.target;if(!t.dataset.pick)return;
+  const id=t.dataset.pick;
+  if(t.checked){if(openPicks()>=MAX_PICKS){t.checked=false;return;}if(!S.picked.includes(id))S.picked.push(id);}
+  else S.picked=S.picked.filter(x=>x!==id);
+  save();render();
+  const nb=$("p-"+id);if(nb)nb.focus();
+});
+let clearArmed=null;
+$("clearList").addEventListener("click",e=>{
+  const b=e.currentTarget;
+  if(!clearArmed){b.textContent="Tap again to clear";clearArmed=setTimeout(()=>{clearArmed=null;b.textContent="Clear list";},4000);return;}
+  clearTimeout(clearArmed);clearArmed=null;b.textContent="Clear list";
+  S.picked=[];save();render();
+});
+$("paceSeg").addEventListener("click",e=>{const b=e.target.closest("[data-pace]");if(!b)return;S.pace=b.dataset.pace;save();render();});
+$("fcToggle").addEventListener("change",e=>{S.useForecast=e.target.checked;save();render();});
+$("rerideToggle").addEventListener("change",e=>{S.reride=e.target.checked;save();render();});
+$("undo").addEventListener("click",()=>{S.log.pop();S.loc=S.log.length?S.log[S.log.length-1].id:"entrance";save();render();});
+$("addBtn").addEventListener("click",()=>logRide($("addSel").value));
+let armed=null;
+$("newDay").addEventListener("click",e=>{
+  const b=e.currentTarget;
+  if(!armed){b.textContent="Tap again to clear today's rides";armed=setTimeout(()=>{armed=null;b.textContent="Start a new day";},4000);return;}
+  clearTimeout(armed);armed=null;b.textContent="Start a new day";
+  S.log=[];S.snooze={};S.loc="entrance";S.tab="plan";save();render();
+});
+
+// ---------- boot ----------
+// A ride log from a previous day starts fresh automatically.
+if(S.log.length&&!sameDay(S.log[S.log.length-1].t)){S.log=[];S.snooze={};S.loc="entrance";}
+handleSharedList();
+save();
+(function(){const c=readCache();if(c&&Date.now()-c.at<FRESH_CACHE_MS){L.mode="cached";L.at=c.at;L.by=c.by;L.src=c.src||"";}})();
+renderSelects();
+startGPS();
+render();
+refresh();
+function onOpen(){
+  if(document.hidden)return;
+  if(S.autoLoc&&watchId==null&&gpsState!=="denied")startGPS();
+  if(Date.now()-L.lastTry>OPEN_REFRESH_MS||(L.nextAt&&Date.now()>=L.nextAt))refresh();else render();
+}
+document.addEventListener("visibilitychange",onOpen);
+window.addEventListener("pageshow",e=>{if(e.persisted)onOpen();});
+window.addEventListener("focus",onOpen);
+window.addEventListener("online",()=>refresh());
+setInterval(()=>{setPill();if(L.nextAt&&Date.now()>=L.nextAt+5000&&!L.fetching)refresh();},15000);
+setInterval(render,60000);
+})();
+</script>
+
+</body></html>
