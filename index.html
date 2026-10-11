@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Ride Planner"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style></head><body>
-<title>Magic Kingdom Ride Planner</title>
+<title>Disney World Ride Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
@@ -166,13 +166,17 @@ footer a{color:inherit}
 .change{font-size:13px;font-weight:600;background:var(--accent-soft);border-radius:8px;padding:6px 10px}
 .share-url{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-size:12px}
 .est{font-size:11px;font-weight:600;color:var(--muted)}
+.parks{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
+.parks button{border:0;background:transparent;border-radius:9px;padding:8px 4px;font-weight:700;font-size:12px;line-height:1.2;color:var(--muted);min-width:0}
+.parks button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+#parkHint{display:flex}
 </style>
 
 <div class="wrap">
   <header>
     <div>
       <h1>Ride Planner</h1>
-      <div class="sub">Magic Kingdom · standby lines only</div>
+      <div class="sub" id="subTitle">Walt Disney World · standby lines only</div>
     </div>
     <div class="status">
       <span class="pill" id="pill"><span class="dot"></span><span id="pillText">Loading…</span></span>
@@ -183,11 +187,19 @@ footer a{color:inherit}
   </header>
   <div class="refresh-line num" id="refreshLine"></div>
 
+  <div class="parks" id="parkSeg" role="group" aria-label="Park">
+    <button data-park="mk">Magic Kingdom</button>
+    <button data-park="ep">EPCOT</button>
+    <button data-park="hs">Hollywood Studios</button>
+    <button data-park="ak">Animal Kingdom</button>
+  </div>
+
   <div class="banner" id="importBanner" hidden></div>
   <div class="banner" id="banner" hidden></div>
 
   <div class="locbox">
     <div class="gps-line" id="gpsLine"><span class="gdot"></span><span id="gpsText"></span></div>
+    <div id="parkHint" hidden></div>
     <div class="loc" id="locRow">
       <label for="locSel">You're at</label>
       <select id="locSel"></select>
@@ -216,8 +228,8 @@ footer a{color:inherit}
 
   <section id="panel-prio" hidden style="display:flex;flex-direction:column;gap:14px">
     <div class="card">
-      <div class="card-head"><h2>Your list</h2><span class="counter num" id="slotCount"></span></div>
-      <p class="small muted" style="margin:0">Drag the grip to rank. #1 counts 3× as much as the last ride on the list.</p>
+      <div class="card-head"><h2 id="listTitle">Your list</h2><span class="counter num" id="slotCount"></span></div>
+      <p class="small muted" style="margin:0">Drag the grip to rank. #1 counts 3× as much as the last ride on the list. Each park keeps its own list.</p>
       <ol class="plist" id="plist"></ol>
       <div class="actions"><button class="btn sm" id="shareList">Share my list</button><button class="btn sm ghost" id="clearList">Clear list</button></div>
       <div id="shareBox" hidden>
@@ -248,7 +260,7 @@ footer a{color:inherit}
   <section id="panel-day" hidden style="display:flex;flex-direction:column;gap:14px">
     <div class="card">
       <div class="card-head">
-        <div><div class="bigcount num" id="count">0</div><div class="small muted">rides today</div></div>
+        <div><div class="bigcount num" id="count">0</div><div class="small muted" id="countLabel">rides today</div></div>
         <button class="btn sm ghost" id="undo">Undo last</button>
       </div>
       <div id="log"></div>
@@ -262,123 +274,241 @@ footer a{color:inherit}
   </section>
 
   <footer>
-    Unofficial tool, not affiliated with Disney. Live waits and forecasts from the <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a> API, with <a href="https://queue-times.com" target="_blank" rel="noopener">Powered by Queue-Times.com</a> as a backup. Refreshes every 10 minutes and each time you open the page. When neither answers, typical waits for the time of day are used (from ThemeParks.wiki forecasts for Oct 10–11, 2026; Buzz Lightyear and Big Thunder are estimated from posted waits), adjusted to today's last live reading. Walk times are straight-line distance × 1.4 for path detours. Ride lengths are approximate; TRON includes the locker stop.
+    Unofficial tool, not affiliated with Disney. Live waits and forecasts from the <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a> API, with <a href="https://queue-times.com" target="_blank" rel="noopener">Powered by Queue-Times.com</a> as a backup. Refreshes every 10 minutes and each time you open the page. When neither answers, typical waits for the time of day are used (from ThemeParks.wiki forecasts on Oct 10–11, 2026; rides with no published forecast are estimated from posted waits), adjusted to today's last live reading. Walk times are straight-line distance × 1.4 for path detours. Ride lengths are approximate and include preshows where they're part of the experience.
   </footer>
 </div>
 
 <script>
 (function(){
 "use strict";
-const PARK = "75ea578a-adc8-4116-a54d-dccb60765ef9";
-const SRC_TPW = "https://api.themeparks.wiki/v1/entity/" + PARK + "/live";
-const SRC_QT = "https://queue-times.com/parks/6/queue_times.json";
 const PATH_FACTOR = 1.4;
 const PACES = {easy:50, normal:65, brisk:80}; // meters per minute
 const STORE = "mk-ride-planner-v1";
-const CACHE = "mk-ride-planner-live";
+const CACHE_PREFIX = "mk-ride-planner-live";
 const REFRESH_MS = 10*60000;
 const OPEN_REFRESH_MS = 60000;
 const FRESH_CACHE_MS = 20*60000;
 const MAX_PICKS = 10;
-const PARK_BOX = {s:28.4140, n:28.4240, w:-81.5875, e:-81.5755};
+const H0 = 8; // typical-wait curves run hourly from 8 AM to 10 PM (15 values)
 
-// id, name, land, lat, lon, ride minutes (approx.), name key for the backup source
-const RIDES = [
- ["5a43d1a7-ad53-4d25-abfe-25625f0da304","TRON Lightcycle / Run","Tomorrowland",28.419625,-81.577985,5,"tron"],
- ["9d4d5229-7142-44b6-b4fb-528920969a2c","Seven Dwarfs Mine Train","Fantasyland",28.42037,-81.58031,3,"seven dwarfs"],
- ["b2260923-9315-40fd-9c6b-44dd811dbe64","Space Mountain","Tomorrowland",28.4188341691,-81.5781962872,3,"space mountain"],
- ["de3309ca-97d5-4211-bffe-739fed47e92f","Big Thunder Mountain Railroad","Frontierland",28.4199638504,-81.5846422864,4,"big thunder"],
- ["73cb9445-0695-47a3-87ce-d08ae36b5f3c","Tiana's Bayou Adventure","Frontierland",28.419418,-81.58498,11,"tiana"],
- ["86a41273-5f15-4b54-93b6-829f140e5161","Peter Pan's Flight","Fantasyland",28.4202640272,-81.5818916811,3,"peter pan"],
- ["2551a77d-023f-4ab1-9a19-8afec0190f39","Haunted Mansion","Liberty Square",28.4202,-81.58288,9,"haunted mansion"],
- ["352feb94-e52e-45eb-9c92-e4b44c6b1a9d","Pirates of the Caribbean","Adventureland",28.4179699235,-81.5842252029,9,"pirates of the caribbean"],
- ["796b0a25-c51e-456e-9bb8-50a324e301b3","Jungle Cruise","Adventureland",28.41797818,-81.5834393157,10,"jungle cruise"],
- ["72c7343a-f7fb-4f66-95df-c91016de7338","Buzz Lightyear's Space Ranger Spin","Tomorrowland",28.4182868839,-81.5794086456,5,"buzz"],
- ["3cba0cb4-e2a6-402c-93ee-c11ffcb127ef","Under the Sea: Little Mermaid","Fantasyland",28.4211203226,-81.5799752427,6,"little mermaid"],
- ["0d94ad60-72f0-4551-83a6-ebaecdd89737","Winnie the Pooh","Fantasyland",28.420212,-81.580266,4,"pooh"],
- ["f5aad2d4-a419-4384-bd9a-42f86385c750","it's a small world","Fantasyland",28.4204816402,-81.5820392026,11,"small world"],
- ["ffcfeaa2-1416-4920-a1ed-543c1a1695c4","PeopleMover","Tomorrowland",28.418155,-81.579033,10,"peoplemover"],
- ["f163ddcd-43e1-488d-8276-2381c1db0a39","Tomorrowland Speedway","Tomorrowland",28.419368,-81.579302,5,"speedway"],
- ["e8f0b426-7645-4ea3-8b41-b94ae7091a41","Monsters, Inc. Laugh Floor","Tomorrowland",28.4183977566,-81.5797358751,15,"laugh floor"],
- ["7c5e1e02-3a44-4151-9005-44066d5ba1da","Mickey's PhilharMagic","Fantasyland",28.4200304909,-81.5814839853,12,"philharmagic"],
- ["d9d12438-d999-4482-894b-8955fdb20ccf","Astro Orbiter","Tomorrowland",28.4184926179,-81.5789887902,2,"astro orbiter"],
- ["0aae716c-af13-4439-b638-d75fb1649df3","Mad Tea Party","Fantasyland",28.4200230397,-81.5798248916,2,"mad tea"],
- ["890fa430-89c0-4a3f-96c9-11597888005e","Dumbo the Flying Elephant","Fantasyland",28.420509033,-81.5789473057,2,"dumbo"],
- ["924a3b2c-6b4b-49e5-99d3-e9dc3f2e8a48","The Barnstormer","Fantasyland",28.4207661576,-81.5783907473,1,"barnstormer"],
- ["96455de6-f4f1-403c-9391-bf8396979149","Magic Carpets of Aladdin","Adventureland",28.41843,-81.583472,2,"magic carpets"],
- ["273ddb8d-e7b5-4e34-8657-1113f49262a5","Prince Charming Regal Carrousel","Fantasyland",28.420169,-81.581255,2,"regal carrousel"],
- ["6fd1e225-53a0-4a80-a577-4bbc9a471075","Enchanted Tiki Room","Adventureland",28.4182264646,-81.583738382,12,"tiki room"],
- ["0f57cecf-5502-4503-8bc3-ba84d3708ace","Country Bear Musical Jamboree","Frontierland",28.4187861348,-81.5837222887,16,"country bear"],
- ["2ebfb38c-5cb5-4de1-86c0-f7af14188022","The Hall of Presidents","Liberty Square",28.4194484171,-81.5823248578,23,"hall of presidents"],
- ["8183f3f2-1b59-4b9c-b634-6a863bdf8d84","Carousel of Progress","Tomorrowland",28.4180310951,-81.5790083064,21,"carousel of progress"],
- ["30fe3c64-af71-4c66-a54b-aa61fd7af177","Swiss Family Treehouse","Adventureland",28.4184325517,-81.5827982677,15,"swiss family"],
- ["e76c93df-31af-49a5-8e2f-752c76c937c9","Enchanted Tales with Belle","Fantasyland",28.4209906,-81.58093,20,"tales with belle"],
- ["888fb4a4-7adf-47a1-8ba2-c258cc64fd75","Main Street Vehicles","Main Street, U.S.A.",28.4168698711,-81.5815081252,5,"main street vehicles"],
- ["e39b831b-7731-49bb-815b-289b4f49a9fd","Walt Disney World Railroad","Main Street, U.S.A.",28.416543,-81.581204,20,"walt disney world railroad"]
-].map(a=>({id:a[0],name:a[1],land:a[2],lat:a[3],lon:a[4],dur:a[5],key:a[6]}));
-const BYID = Object.fromEntries(RIDES.map(r=>[r.id,r]));
-const ENTRANCE = {id:"entrance",name:"Park entrance",land:"Main Street, U.S.A.",lat:28.4161,lon:-81.5812};
-const LANDS = ["Main Street, U.S.A.","Adventureland","Frontierland","Liberty Square","Fantasyland","Tomorrowland"];
-const DEFAULT_ORDER = RIDES.map(r=>r.id);
-
-// Typical standby wait by hour, 8 AM through 10 PM (15 values).
-// Source: ThemeParks.wiki forecasts for Sat Oct 10 and Sun Oct 11, 2026, averaged.
-// Buzz Lightyear and Big Thunder publish no forecast; their curves are estimated from posted waits.
-const H0 = 8;
-const HIST = {
- "5a43d1a7-ad53-4d25-abfe-25625f0da304":[45,75,60,65,65,65,65,75,80,80,85,85,90,85,100],
- "9d4d5229-7142-44b6-b4fb-528920969a2c":[40,40,45,60,60,60,60,55,60,60,65,65,70,45,35],
- "b2260923-9315-40fd-9c6b-44dd811dbe64":[15,25,45,50,55,50,45,45,50,45,45,45,30,25,25],
- "de3309ca-97d5-4211-bffe-739fed47e92f":[10,20,35,45,50,50,50,50,50,50,50,45,30,20,15],
- "73cb9445-0695-47a3-87ce-d08ae36b5f3c":[10,15,35,45,55,60,60,60,60,60,60,60,50,40,15],
- "86a41273-5f15-4b54-93b6-829f140e5161":[30,35,40,50,50,50,50,50,50,50,50,50,50,30,25],
- "2551a77d-023f-4ab1-9a19-8afec0190f39":[15,15,25,35,40,35,35,35,40,40,40,30,20,20,15],
- "352feb94-e52e-45eb-9c92-e4b44c6b1a9d":[5,10,15,30,40,30,30,30,30,30,30,30,20,10,10],
- "796b0a25-c51e-456e-9bb8-50a324e301b3":[10,20,40,45,45,45,45,45,45,45,45,45,25,15,10],
- "72c7343a-f7fb-4f66-95df-c91016de7338":[15,20,35,40,45,45,45,45,45,45,45,40,30,25,20],
- "3cba0cb4-e2a6-402c-93ee-c11ffcb127ef":[5,5,10,20,25,30,30,25,30,30,30,30,25,5,5],
- "0d94ad60-72f0-4551-83a6-ebaecdd89737":[25,30,30,40,40,40,40,40,40,40,40,40,35,30,12],
- "f5aad2d4-a419-4384-bd9a-42f86385c750":[5,10,10,20,25,25,25,25,25,25,25,15,10,10,5],
- "ffcfeaa2-1416-4920-a1ed-543c1a1695c4":[5,5,5,10,15,20,10,10,20,20,20,20,20,10,5],
- "f163ddcd-43e1-488d-8276-2381c1db0a39":[10,20,20,20,20,20,20,20,20,20,20,25,20,15,15],
- "e8f0b426-7645-4ea3-8b41-b94ae7091a41":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,0],
- "7c5e1e02-3a44-4151-9005-44066d5ba1da":[15,15,15,15,15,15,15,15,15,15,15,15,15,15,15],
- "d9d12438-d999-4482-894b-8955fdb20ccf":[10,10,15,25,25,20,15,15,15,25,25,30,25,10,10],
- "0aae716c-af13-4439-b638-d75fb1649df3":[5,5,10,15,20,20,15,15,15,15,15,15,10,10,5],
- "890fa430-89c0-4a3f-96c9-11597888005e":[5,10,10,15,20,20,10,10,10,20,20,20,30,15,10],
- "924a3b2c-6b4b-49e5-99d3-e9dc3f2e8a48":[5,5,10,20,20,20,20,20,20,20,30,30,25,10,5],
- "96455de6-f4f1-403c-9391-bf8396979149":[5,10,15,20,20,15,10,10,15,15,20,20,15,5,5],
- "273ddb8d-e7b5-4e34-8657-1113f49262a5":[5,5,5,10,10,10,10,10,10,10,10,10,15,10,10],
- "6fd1e225-53a0-4a80-a577-4bbc9a471075":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,10],
- "0f57cecf-5502-4503-8bc3-ba84d3708ace":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,10],
- "2ebfb38c-5cb5-4de1-86c0-f7af14188022":[0,15,15,15,15,15,15,15,15,15,15,15,15,0,0],
- "30fe3c64-af71-4c66-a54b-aa61fd7af177":[5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
- "e76c93df-31af-49a5-8e2f-752c76c937c9":[0,0,15,15,15,15,15,15,15,15,15,15,0,0,0]
+// Each ride: id, name, land, lat, lon, ride minutes (approx.), name key for the backup source.
+// Each park lists its headliners first; the first 10 are the starting list.
+// hist: typical standby wait by hour from ThemeParks.wiki forecasts. est: no published forecast, curve estimated from posted waits.
+const PARKS = {
+ mk:{name:"Magic Kingdom",tpw:"75ea578a-adc8-4116-a54d-dccb60765ef9",qt:6,
+  box:{s:28.4140,n:28.4240,w:-81.5875,e:-81.5755},
+  entrances:[{id:"entrance",name:"Park entrance",lat:28.4161,lon:-81.5812}],
+  lands:["Main Street, U.S.A.","Adventureland","Frontierland","Liberty Square","Fantasyland","Tomorrowland"],
+  rides:[
+   ["5a43d1a7-ad53-4d25-abfe-25625f0da304","TRON Lightcycle / Run","Tomorrowland",28.419625,-81.577985,5,"tron"],
+   ["9d4d5229-7142-44b6-b4fb-528920969a2c","Seven Dwarfs Mine Train","Fantasyland",28.42037,-81.58031,3,"seven dwarfs"],
+   ["b2260923-9315-40fd-9c6b-44dd811dbe64","Space Mountain","Tomorrowland",28.4188341691,-81.5781962872,3,"space mountain"],
+   ["de3309ca-97d5-4211-bffe-739fed47e92f","Big Thunder Mountain Railroad","Frontierland",28.4199638504,-81.5846422864,4,"big thunder"],
+   ["73cb9445-0695-47a3-87ce-d08ae36b5f3c","Tiana's Bayou Adventure","Frontierland",28.419418,-81.58498,11,"tiana"],
+   ["86a41273-5f15-4b54-93b6-829f140e5161","Peter Pan's Flight","Fantasyland",28.4202640272,-81.5818916811,3,"peter pan"],
+   ["2551a77d-023f-4ab1-9a19-8afec0190f39","Haunted Mansion","Liberty Square",28.4202,-81.58288,9,"haunted mansion"],
+   ["352feb94-e52e-45eb-9c92-e4b44c6b1a9d","Pirates of the Caribbean","Adventureland",28.4179699235,-81.5842252029,9,"pirates of the caribbean"],
+   ["796b0a25-c51e-456e-9bb8-50a324e301b3","Jungle Cruise","Adventureland",28.41797818,-81.5834393157,10,"jungle cruise"],
+   ["72c7343a-f7fb-4f66-95df-c91016de7338","Buzz Lightyear's Space Ranger Spin","Tomorrowland",28.4182868839,-81.5794086456,5,"buzz"],
+   ["3cba0cb4-e2a6-402c-93ee-c11ffcb127ef","Under the Sea: Little Mermaid","Fantasyland",28.4211203226,-81.5799752427,6,"little mermaid"],
+   ["0d94ad60-72f0-4551-83a6-ebaecdd89737","Winnie the Pooh","Fantasyland",28.420212,-81.580266,4,"pooh"],
+   ["f5aad2d4-a419-4384-bd9a-42f86385c750","it's a small world","Fantasyland",28.4204816402,-81.5820392026,11,"small world"],
+   ["ffcfeaa2-1416-4920-a1ed-543c1a1695c4","PeopleMover","Tomorrowland",28.418155,-81.579033,10,"peoplemover"],
+   ["f163ddcd-43e1-488d-8276-2381c1db0a39","Tomorrowland Speedway","Tomorrowland",28.419368,-81.579302,5,"speedway"],
+   ["e8f0b426-7645-4ea3-8b41-b94ae7091a41","Monsters, Inc. Laugh Floor","Tomorrowland",28.4183977566,-81.5797358751,15,"laugh floor"],
+   ["7c5e1e02-3a44-4151-9005-44066d5ba1da","Mickey's PhilharMagic","Fantasyland",28.4200304909,-81.5814839853,12,"philharmagic"],
+   ["d9d12438-d999-4482-894b-8955fdb20ccf","Astro Orbiter","Tomorrowland",28.4184926179,-81.5789887902,2,"astro orbiter"],
+   ["0aae716c-af13-4439-b638-d75fb1649df3","Mad Tea Party","Fantasyland",28.4200230397,-81.5798248916,2,"mad tea"],
+   ["890fa430-89c0-4a3f-96c9-11597888005e","Dumbo the Flying Elephant","Fantasyland",28.420509033,-81.5789473057,2,"dumbo"],
+   ["924a3b2c-6b4b-49e5-99d3-e9dc3f2e8a48","The Barnstormer","Fantasyland",28.4207661576,-81.5783907473,1,"barnstormer"],
+   ["96455de6-f4f1-403c-9391-bf8396979149","Magic Carpets of Aladdin","Adventureland",28.41843,-81.583472,2,"magic carpets"],
+   ["273ddb8d-e7b5-4e34-8657-1113f49262a5","Prince Charming Regal Carrousel","Fantasyland",28.420169,-81.581255,2,"regal carrousel"],
+   ["6fd1e225-53a0-4a80-a577-4bbc9a471075","Enchanted Tiki Room","Adventureland",28.4182264646,-81.583738382,12,"tiki room"],
+   ["0f57cecf-5502-4503-8bc3-ba84d3708ace","Country Bear Musical Jamboree","Frontierland",28.4187861348,-81.5837222887,16,"country bear"],
+   ["2ebfb38c-5cb5-4de1-86c0-f7af14188022","The Hall of Presidents","Liberty Square",28.4194484171,-81.5823248578,23,"hall of presidents"],
+   ["8183f3f2-1b59-4b9c-b634-6a863bdf8d84","Carousel of Progress","Tomorrowland",28.4180310951,-81.5790083064,21,"carousel of progress"],
+   ["30fe3c64-af71-4c66-a54b-aa61fd7af177","Swiss Family Treehouse","Adventureland",28.4184325517,-81.5827982677,15,"swiss family"],
+   ["e76c93df-31af-49a5-8e2f-752c76c937c9","Enchanted Tales with Belle","Fantasyland",28.4209906,-81.58093,20,"tales with belle"],
+   ["888fb4a4-7adf-47a1-8ba2-c258cc64fd75","Main Street Vehicles","Main Street, U.S.A.",28.4168698711,-81.5815081252,5,"main street vehicles"],
+   ["e39b831b-7731-49bb-815b-289b4f49a9fd","Walt Disney World Railroad","Main Street, U.S.A.",28.416543,-81.581204,20,"walt disney world railroad"]
+  ],
+  hist:{
+   "5a43d1a7-ad53-4d25-abfe-25625f0da304":[45,75,60,65,65,65,65,75,80,80,85,85,90,85,100],
+   "9d4d5229-7142-44b6-b4fb-528920969a2c":[40,40,45,60,60,60,60,55,60,60,65,65,70,45,35],
+   "b2260923-9315-40fd-9c6b-44dd811dbe64":[15,25,45,50,55,50,45,45,50,45,45,45,30,25,25],
+   "de3309ca-97d5-4211-bffe-739fed47e92f":[10,20,35,45,50,50,50,50,50,50,50,45,30,20,15],
+   "73cb9445-0695-47a3-87ce-d08ae36b5f3c":[10,15,35,45,55,60,60,60,60,60,60,60,50,40,15],
+   "86a41273-5f15-4b54-93b6-829f140e5161":[30,35,40,50,50,50,50,50,50,50,50,50,50,30,25],
+   "2551a77d-023f-4ab1-9a19-8afec0190f39":[15,15,25,35,40,35,35,35,40,40,40,30,20,20,15],
+   "352feb94-e52e-45eb-9c92-e4b44c6b1a9d":[5,10,15,30,40,30,30,30,30,30,30,30,20,10,10],
+   "796b0a25-c51e-456e-9bb8-50a324e301b3":[10,20,40,45,45,45,45,45,45,45,45,45,25,15,10],
+   "72c7343a-f7fb-4f66-95df-c91016de7338":[15,20,35,40,45,45,45,45,45,45,45,40,30,25,20],
+   "3cba0cb4-e2a6-402c-93ee-c11ffcb127ef":[5,5,10,20,25,30,30,25,30,30,30,30,25,5,5],
+   "0d94ad60-72f0-4551-83a6-ebaecdd89737":[25,30,30,40,40,40,40,40,40,40,40,40,35,30,12],
+   "f5aad2d4-a419-4384-bd9a-42f86385c750":[5,10,10,20,25,25,25,25,25,25,25,15,10,10,5],
+   "ffcfeaa2-1416-4920-a1ed-543c1a1695c4":[5,5,5,10,15,20,10,10,20,20,20,20,20,10,5],
+   "f163ddcd-43e1-488d-8276-2381c1db0a39":[10,20,20,20,20,20,20,20,20,20,20,25,20,15,15],
+   "e8f0b426-7645-4ea3-8b41-b94ae7091a41":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,0],
+   "7c5e1e02-3a44-4151-9005-44066d5ba1da":[15,15,15,15,15,15,15,15,15,15,15,15,15,15,15],
+   "d9d12438-d999-4482-894b-8955fdb20ccf":[10,10,15,25,25,20,15,15,15,25,25,30,25,10,10],
+   "0aae716c-af13-4439-b638-d75fb1649df3":[5,5,10,15,20,20,15,15,15,15,15,15,10,10,5],
+   "890fa430-89c0-4a3f-96c9-11597888005e":[5,10,10,15,20,20,10,10,10,20,20,20,30,15,10],
+   "924a3b2c-6b4b-49e5-99d3-e9dc3f2e8a48":[5,5,10,20,20,20,20,20,20,20,30,30,25,10,5],
+   "96455de6-f4f1-403c-9391-bf8396979149":[5,10,15,20,20,15,10,10,15,15,20,20,15,5,5],
+   "273ddb8d-e7b5-4e34-8657-1113f49262a5":[5,5,5,10,10,10,10,10,10,10,10,10,15,10,10],
+   "6fd1e225-53a0-4a80-a577-4bbc9a471075":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,10],
+   "0f57cecf-5502-4503-8bc3-ba84d3708ace":[0,10,10,10,10,10,10,10,10,10,10,10,10,10,10],
+   "2ebfb38c-5cb5-4de1-86c0-f7af14188022":[0,15,15,15,15,15,15,15,15,15,15,15,15,0,0],
+   "30fe3c64-af71-4c66-a54b-aa61fd7af177":[5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+   "e76c93df-31af-49a5-8e2f-752c76c937c9":[0,0,15,15,15,15,15,15,15,15,15,15,0,0,0]
+  }},
+ ep:{name:"EPCOT",tpw:"47f90d2c-e191-4239-a466-5892ef59a88b",qt:5,
+  box:{s:28.3645,n:28.3790,w:-81.5565,e:-81.5435},
+  entrances:[{id:"entrance",name:"Main entrance",lat:28.3768,lon:-81.5494},{id:"gateway",name:"International Gateway",lat:28.3672,lon:-81.5528}],
+  lands:["World Celebration","World Discovery","World Nature","World Showcase"],
+  rides:[
+   ["e3549451-b284-453d-9c31-e3b1207abd79","Guardians of the Galaxy: Cosmic Rewind","World Discovery",28.3749021961781,-81.5478397673417,6,"cosmic rewind"],
+   ["37ae57c5-feaf-4e47-8f27-4b385be200f0","Test Track","World Discovery",28.373228,-81.547489,6,"test track"],
+   ["1e735ffb-4868-47f1-b2cd-2ac1156cd5f0","Remy's Ratatouille Adventure","World Showcase",28.36825,-81.553097,5,"ratatouille"],
+   ["8d7ccdb1-a22b-4e26-8dc8-65b1938ed5f0","Frozen Ever After","World Showcase",28.370745,-81.54653,5,"frozen ever after"],
+   ["81b15dfd-cf6a-466f-be59-3dd65d2a2807","Soarin' Across America","World Nature",28.373592,-81.552248,8,"soarin"],
+   ["5b6475ad-4e9a-4793-b841-501aa382c9c0","Mission: SPACE","World Discovery",28.373927,-81.547156,8,"mission space"],
+   ["480fde8f-fe58-4bfb-b3ab-052a39d4db7c","Spaceship Earth","World Celebration",28.375583,-81.549401,16,"spaceship earth"],
+   ["8f353879-d6ac-4211-9352-4029efb47c18","Living with the Land","World Nature",28.374245,-81.552301,14,"living with the land"],
+   ["75449e85-c410-4cef-a368-9d2ea5d52b58","Journey Into Imagination With Figment","World Celebration",28.372994,-81.551401,6,"figment"],
+   ["22f48b73-01df-460e-8969-9eb2b4ae836c","Gran Fiesta Tour","World Showcase",28.371649,-81.547368,8,"gran fiesta"],
+   ["fb076275-0570-4d62-b2a9-4d6515130fa3","The Seas with Nemo & Friends","World Nature",28.374904,-81.550852,5,"seas with nemo"],
+   ["57acb522-a6fc-4aa4-a80e-21f21f317250","Turtle Talk With Crush","World Nature",28.375255,-81.551047,15,"turtle talk"],
+   ["dae68dee-dfba-4128-b594-6aa12add1070","Journey of Water, Inspired by Moana","World Nature",28.374691,-81.550378,10,"journey of water"],
+   ["482169b9-2889-4747-8aef-f9d13a37d940","Awesome Planet","World Nature",28.374301,-81.552138,10,"awesome planet"],
+   ["61fb49f8-e62f-4e1c-ae0e-8ab9929037bc","Canada Far and Wide","World Showcase",28.371694,-81.55196,14,"canada far and wide"],
+   ["ee070d46-6a64-41c0-9f12-69dcfcca10a0","Reflections of China","World Showcase",28.369791,-81.546381,14,"reflections of china"]
+  ],
+  hist:{
+   "e3549451-b284-453d-9c31-e3b1207abd79":[115,115,110,110,110,105,105,115,115,115,120,115,120,120,120],
+   "37ae57c5-feaf-4e47-8f27-4b385be200f0":[75,75,80,95,110,100,100,105,110,115,115,110,105,105,105],
+   "1e735ffb-4868-47f1-b2cd-2ac1156cd5f0":[45,45,55,60,70,75,75,80,80,80,80,75,65,65,65],
+   "8d7ccdb1-a22b-4e26-8dc8-65b1938ed5f0":[40,40,55,65,70,70,70,70,70,70,70,65,55,55,55],
+   "81b15dfd-cf6a-466f-be59-3dd65d2a2807":[20,20,35,45,50,55,55,55,55,55,55,55,50,50,50],
+   "5b6475ad-4e9a-4793-b841-501aa382c9c0":[15,15,20,25,25,20,15,20,15,20,15,15,15,15,15],
+   "480fde8f-fe58-4bfb-b3ab-052a39d4db7c":[10,10,15,20,25,25,25,20,20,20,20,20,15,15,15],
+   "8f353879-d6ac-4211-9352-4029efb47c18":[10,10,30,30,30,30,30,30,30,25,20,15,5,5,5],
+   "75449e85-c410-4cef-a368-9d2ea5d52b58":[5,5,20,30,30,25,20,25,25,20,20,20,10,10,10],
+   "22f48b73-01df-460e-8969-9eb2b4ae836c":[5,5,5,10,20,25,25,25,25,20,15,15,10,10,10],
+   "fb076275-0570-4d62-b2a9-4d6515130fa3":[5,5,10,10,10,10,10,10,10,10,10,10,10,10,10],
+   "57acb522-a6fc-4aa4-a80e-21f21f317250":[20,20,20,20,20,20,20,20,20,20,20,20,20,20,20],
+   "dae68dee-dfba-4128-b594-6aa12add1070":[10,10,10,10,10,10,10,10,10,10,10,10,10,10,10],
+   "482169b9-2889-4747-8aef-f9d13a37d940":[15,15,15,15,15,15,15,15,15,15,15,15,15,15,15],
+   "61fb49f8-e62f-4e1c-ae0e-8ab9929037bc":[15,15,15,15,15,15,15,15,15,15,15,15,15,15,15],
+   "ee070d46-6a64-41c0-9f12-69dcfcca10a0":[15,15,15,15,15,15,15,15,15,15,15,15,15,15,15]
+  }},
+ hs:{name:"Hollywood Studios",tpw:"288747d1-8b4f-4a64-867e-ea7c9b27bad8",qt:7,
+  box:{s:28.3515,n:28.3620,w:-81.5655,e:-81.5555},
+  entrances:[{id:"entrance",name:"Park entrance",lat:28.3578,lon:-81.5582}],
+  lands:["Hollywood Boulevard","Echo Lake","Sunset Boulevard","Animation Courtyard","Toy Story Land","Star Wars: Galaxy's Edge"],
+  rides:[
+   ["1a2e70d9-50d5-4140-b69e-799e950f7d18","Star Wars: Rise of the Resistance","Star Wars: Galaxy's Edge",28.354884,-81.560457,15,"rise of the resistance"],
+   ["399aa0a1-98e2-4d2b-b297-2b451e9665e1","Slinky Dog Dash","Toy Story Land",28.356245,-81.562786,2,"slinky dog"],
+   ["e516f303-e82d-4fd3-8fbf-8e6ab624cf89","Rock 'n' Roller Coaster Starring The Muppets","Sunset Boulevard",28.359712,-81.56059,5,"roller coaster"],
+   ["6f6998e8-a629-412c-b964-2cb06af8e26b","Tower of Terror","Sunset Boulevard",28.359553,-81.559772,7,"tower of terror"],
+   ["6e118e37-5002-408d-9d88-0b5d9cdb5d14","Mickey & Minnie's Runaway Railway","Hollywood Boulevard",28.3566783801,-81.5605667783,8,"runaway railway"],
+   ["34c4916b-989b-4ff1-a7e3-a6a846a3484f","Millennium Falcon: Smugglers Run","Star Wars: Galaxy's Edge",28.353889,-81.561689,8,"smugglers run"],
+   ["20b5daa8-e1ea-436f-830c-2d7d18d929b5","Toy Story Mania!","Toy Story Land",28.356404,-81.561894,7,"toy story mania"],
+   ["d56506e2-6ad3-443a-8065-fea37987248d","Alien Swirling Saucers","Toy Story Land",28.355385,-81.562379,2,"alien swirling saucers"],
+   ["3b290419-8ca2-44bc-a710-a6c83fca76ec","Star Tours","Echo Lake",28.355695,-81.558891,7,"star tours"],
+   ["9211adc9-b296-4667-8e97-b40cf76108e4","Vacation Fun (animated short)","Animation Courtyard",28.356316,-81.559031,10,"vacation fun"]
+  ],
+  hist:{
+   "1a2e70d9-50d5-4140-b69e-799e950f7d18":[35,60,70,70,70,65,70,70,45,45,70,40,35,35,35],
+   "399aa0a1-98e2-4d2b-b297-2b451e9665e1":[65,75,75,80,85,80,75,75,75,80,75,75,70,70,70],
+   "e516f303-e82d-4fd3-8fbf-8e6ab624cf89":[40,45,60,70,75,75,75,75,75,75,75,75,70,70,70],
+   "6f6998e8-a629-412c-b964-2cb06af8e26b":[20,25,40,55,45,70,60,60,30,45,65,40,30,30,30],
+   "6e118e37-5002-408d-9d88-0b5d9cdb5d14":[20,35,50,55,55,50,50,45,40,45,40,45,35,35,35],
+   "34c4916b-989b-4ff1-a7e3-a6a846a3484f":[15,20,45,45,50,45,45,30,20,25,20,20,15,15,15],
+   "20b5daa8-e1ea-436f-830c-2d7d18d929b5":[15,45,45,45,50,45,45,45,45,45,50,45,45,45,45],
+   "d56506e2-6ad3-443a-8065-fea37987248d":[10,15,30,40,40,40,40,25,25,25,30,30,15,15,15],
+   "3b290419-8ca2-44bc-a710-a6c83fca76ec":[5,5,15,20,15,15,10,5,5,5,5,5,5,5,5],
+   "9211adc9-b296-4667-8e97-b40cf76108e4":[15,10,10,10,10,10,10,10,10,10,10,10,0,0,0]
+  }},
+ ak:{name:"Animal Kingdom",tpw:"1c84a229-8862-4648-9c71-378ddd2c7693",qt:8,
+  box:{s:28.3515,n:28.3685,w:-81.5965,e:-81.5835},
+  entrances:[{id:"entrance",name:"Park entrance",lat:28.3550,lon:-81.5902}],
+  lands:["Discovery Island","Pandora","Africa","Asia","Rafiki's Planet Watch"],
+  rides:[
+   ["24cf863c-b6ba-4826-a056-0b698989cbf7","Avatar Flight of Passage","Pandora",28.355554,-81.592147,12,"flight of passage"],
+   ["7a5af3b7-9bc1-4962-92d0-3ea9c9ce35f0","Na'vi River Journey","Pandora",28.355257,-81.591641,5,"river journey"],
+   ["32e01181-9a5f-4936-8a77-0dace1de836c","Kilimanjaro Safaris","Africa",28.359331,-81.59228,20,"kilimanjaro"],
+   ["64a6915f-a835-4226-ba5c-8389fc4cade3","Expedition Everest","Asia",28.3584769119,-81.5873781396,4,"everest"],
+   ["d58d9262-ec95-4161-80a0-07ca43b2f5f3","Kali River Rapids","Asia",28.3587834288,-81.5889412165,6,"kali river"],
+   ["1b15c77b-0311-4171-8e59-7f38e6d60754","Zootopia: Better Zoogether!","Discovery Island",28.357488,-81.590118,10,"zootopia"],
+   ["e7976e25-4322-4587-8ded-fb1d9dcbb83c","Gorilla Falls Exploration Trail","Africa",28.359954,-81.592149,20,"gorilla falls"],
+   ["1a8ea967-229a-42a0-8290-59b036c84e14","Maharajah Jungle Trek","Asia",28.359379,-81.589019,20,"maharajah"],
+   ["4f391f0e-52be-4f9d-99d6-b3ae0373b43c","Wildlife Express Train","Africa",28.3598097347,-81.5914175464,8,"wildlife express"],
+   ["d5dfc051-f951-40ac-8774-3e9961331ab9","Bluey's Wild World (via train)","Rafiki's Planet Watch",28.36533,-81.58872,10,"bluey"]
+  ],
+  hist:{
+   "24cf863c-b6ba-4826-a056-0b698989cbf7":[105,100,105,105,100,100,80,75,75,65,55,55,55,55,55],
+   "7a5af3b7-9bc1-4962-92d0-3ea9c9ce35f0":[30,45,60,70,65,50,50,50,50,50,45,45,45,45,45],
+   "32e01181-9a5f-4936-8a77-0dace1de836c":[40,60,75,80,60,55,40,25,15,10,10,10,10,10,10],
+   "64a6915f-a835-4226-ba5c-8389fc4cade3":[15,30,45,50,60,45,35,45,40,30,15,15,15,15,15],
+   "d58d9262-ec95-4161-80a0-07ca43b2f5f3":[5,10,50,60,60,65,65,60,60,55,55,55,55,55,55],
+   "1b15c77b-0311-4171-8e59-7f38e6d60754":[15,15,15,15,15,15,15,15,15,15,15,15,15,15,15],
+   "e7976e25-4322-4587-8ded-fb1d9dcbb83c":[5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+   "1a8ea967-229a-42a0-8290-59b036c84e14":[5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+   "4f391f0e-52be-4f9d-99d6-b3ae0373b43c":[5,10,15,15,15,15,15,15,10,10,10,10,10,10,10],
+   "d5dfc051-f951-40ac-8774-3e9961331ab9":[25,25,25,25,25,25,25,25,25,25,25,25,25,25,25]
+  }}
 };
+const PARK_KEYS = Object.keys(PARKS);
+for(const k of PARK_KEYS){
+  const p=PARKS[k];
+  p.key=k;
+  p.rides=p.rides.map(a=>({id:a[0],name:a[1],land:a[2],lat:a[3],lon:a[4],dur:a[5],key:a[6]}));
+  p.byId=Object.fromEntries(p.rides.map(r=>[r.id,r]));
+  p.order=p.rides.map(r=>r.id);
+}
+// Current park; these are swapped by setPark().
+let P,RIDES,BYID,HIST,LANDS,DEFAULT_ORDER,ENTRANCES;
+function bindPark(k){
+  P=PARKS[k];RIDES=P.rides;BYID=P.byId;HIST=P.hist;LANDS=P.lands;DEFAULT_ORDER=P.order;ENTRANCES=P.entrances;
+}
 
 // ---------- state ----------
 let firstRun=false;
-function defaults(){return {picked:DEFAULT_ORDER.slice(0,MAX_PICKS),loc:"entrance",autoLoc:true,log:[],snooze:{},pace:"normal",useForecast:true,reride:false,tab:"plan"};}
+function freshParkState(k){return {picked:PARKS[k].order.slice(0,MAX_PICKS),loc:"entrance",log:[],snooze:{}};}
+function cleanParkState(k,ps){
+  const p=PARKS[k],out=Object.assign(freshParkState(k),ps||{});
+  if(!Array.isArray(out.picked))out.picked=p.order.slice(0,MAX_PICKS);
+  out.picked=out.picked.filter((id,i,a)=>p.byId[id]&&a.indexOf(id)===i);
+  if(!Array.isArray(out.log))out.log=[];
+  out.log=out.log.filter(x=>x&&p.byId[x.id]);
+  if(!p.byId[out.loc]&&!p.entrances.some(e=>e.id===out.loc))out.loc="entrance";
+  if(!out.snooze||typeof out.snooze!=="object")out.snooze={};
+  return {picked:out.picked,loc:out.loc,log:out.log,snooze:out.snooze};
+}
 function load(){
-  let s=defaults(),raw=null;
+  let raw=null,s={};
   try{raw=localStorage.getItem(STORE);}catch(e){}
-  if(raw){try{s=Object.assign(s,JSON.parse(raw));}catch(e){}}else firstRun=true;
-  const known=new Set(DEFAULT_ORDER);
-  if(!Array.isArray(s.picked))s.picked=DEFAULT_ORDER.slice(0,MAX_PICKS);
-  s.picked=s.picked.filter((id,i,a)=>known.has(id)&&a.indexOf(id)===i);
-  if(!Array.isArray(s.log))s.log=[];
-  s.log=s.log.filter(x=>x&&known.has(x.id));
-  delete s.order;delete s.skip;delete s.sampleEdits;
-  if(s.loc!=="entrance"&&!BYID[s.loc])s.loc="entrance";
-  if(!PACES[s.pace])s.pace="normal";
-  return s;
+  if(raw){try{s=JSON.parse(raw)||{};}catch(e){s={};}}else firstRun=true;
+  // Older versions stored Magic Kingdom data at the top level.
+  if(!s.parks){s.parks={mk:{picked:s.picked,loc:s.loc,log:s.log,snooze:s.snooze}};}
+  const out={park:PARKS[s.park]?s.park:"mk",parks:{},autoLoc:s.autoLoc!==false,pace:PACES[s.pace]?s.pace:"normal",
+    useForecast:s.useForecast!==false,reride:!!s.reride,tab:["plan","prio","day"].includes(s.tab)?s.tab:"plan"};
+  for(const k of PARK_KEYS)out.parks[k]=cleanParkState(k,s.parks[k]);
+  // Per-park fields read and write through to the current park (not saved twice).
+  for(const f of ["picked","loc","log","snooze"]){
+    Object.defineProperty(out,f,{enumerable:false,get(){return out.parks[out.park][f];},set(v){out.parks[out.park][f]=v;}});
+  }
+  return out;
 }
 let storageOK=true;
 function save(){try{localStorage.setItem(STORE,JSON.stringify(S));storageOK=true;}catch(e){storageOK=false;}}
 let S=load();
+bindPark(S.park);
 
 // mode: loading | live | cached (recent live data) | history (typical waits)
-let L={mode:"loading",at:null,by:{},src:"",err:null,errMsg:"",fetching:false,lastTry:0,nextAt:0,fails:0};
+function blankLive(){return {mode:"loading",at:null,by:{},src:"",err:null,errMsg:"",fetching:false,lastTry:0,nextAt:0,fails:0,calibrated:false};}
+let L=blankLive();
 let cspBlocked=false;
 document.addEventListener("securitypolicyviolation",e=>{
   const u=String(e.blockedURI||"");
@@ -394,7 +524,7 @@ function fmtHour(t){return new Date(t).toLocaleTimeString([],{hour:"numeric"});}
 function sameDay(t){const a=new Date(t),b=new Date();return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
 function todayAt(h){const d=new Date();d.setHours(h,0,0,0);return d.getTime();}
 function round5(x){return Math.max(0,Math.round(x/5)*5);}
-function norm(s){return " "+String(s).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()+" ";}
+function norm(s){return " "+String(s).toLowerCase().replace(/[’']/g,"").replace(/[^a-z0-9]+/g," ").trim()+" ";}
 function median(a){if(!a.length)return null;const s=a.slice().sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;}
 
 // ---------- history (typical waits) ----------
@@ -405,7 +535,6 @@ function curveAt(id,t){
   return c[a]*(1-f)+c[b]*f;
 }
 function histForecast(id,k){return HIST[id]?HIST[id].map((w,i)=>({t:todayAt(H0+i),w:round5(w*k)})):[];}
-// How today's real waits compare with the typical curve, per ride, from a set of observations.
 function ratiosFrom(by,at){
   const out={};
   for(const id in by){
@@ -431,11 +560,12 @@ function historyData(){
 }
 
 // ---------- live data ----------
+function cacheKey(){return CACHE_PREFIX+(P.key==="mk"?"":"-"+P.key);}
 function readCache(){
-  try{const c=JSON.parse(localStorage.getItem(CACHE)||"null");if(c&&c.at&&c.by&&Date.now()-c.at<18*3600000)return c;}catch(e){}
+  try{const c=JSON.parse(localStorage.getItem(cacheKey())||"null");if(c&&c.at&&c.by&&Date.now()-c.at<18*3600000)return c;}catch(e){}
   return null;
 }
-function writeCache(){try{localStorage.setItem(CACHE,JSON.stringify({at:L.at,by:L.by,src:L.src}));}catch(e){}}
+function writeCache(){try{localStorage.setItem(cacheKey(),JSON.stringify({at:L.at,by:L.by,src:L.src}));}catch(e){}}
 async function fetchJSON(url){
   const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),12000);
   try{
@@ -453,7 +583,7 @@ function parseTPW(j){
     const q=e.queue&&e.queue.STANDBY;
     const wait=q&&typeof q.waitTime==="number"?q.waitTime:null;
     let fc=(e.forecast||[]).map(f=>({t:Date.parse(f.time),w:f.waitTime})).filter(f=>!isNaN(f.t)&&typeof f.w==="number");
-    if(!fc.length&&HIST[e.id]){ // no published forecast: use the typical curve scaled to the live wait
+    if(!fc.length&&HIST[e.id]){
       const base=curveAt(e.id,Date.now());
       fc=histForecast(e.id,wait!=null&&base>=8?clamp(wait/base,0.6,1.8):1);
     }
@@ -474,30 +604,31 @@ function parseQT(j){
   }
   return by;
 }
-let timer=null;
+let timer=null,refreshSeq=0;
 function schedule(ms){clearTimeout(timer);L.nextAt=Date.now()+ms;timer=setTimeout(refresh,ms);}
 async function refresh(){
   if(L.fetching)return;
+  const seq=++refreshSeq,parkAtStart=P.key,minRides=Math.min(5,RIDES.length);
   const before=topPick();
   L.fetching=true;L.lastTry=Date.now();setPill();
   try{
     let by,src;
-    try{by=parseTPW(await fetchJSON(SRC_TPW));src="ThemeParks.wiki";if(Object.keys(by).length<5)throw new Error("Too little data");}
-    catch(e1){by=parseQT(await fetchJSON(SRC_QT));src="Queue-Times.com";if(Object.keys(by).length<5)throw e1;}
+    try{by=parseTPW(await fetchJSON("https://api.themeparks.wiki/v1/entity/"+P.tpw+"/live"));src="ThemeParks.wiki";if(Object.keys(by).length<minRides)throw new Error("Too little data");}
+    catch(e1){by=parseQT(await fetchJSON("https://queue-times.com/parks/"+P.qt+"/queue_times.json"));src="Queue-Times.com";if(Object.keys(by).length<minRides)throw e1;}
+    if(seq!==refreshSeq||parkAtStart!==P.key)return; // park changed mid-request
     L.mode="live";L.at=Date.now();L.by=by;L.src=src;L.err=null;L.errMsg="";L.fails=0;
     writeCache();
     schedule(REFRESH_MS);
   }catch(err){
-    await new Promise(r=>setTimeout(r,60)); // let a blocked-request event arrive first
+    await new Promise(r=>setTimeout(r,60));
+    if(seq!==refreshSeq||parkAtStart!==P.key)return;
     L.fails++;
     L.err=cspBlocked?"blocked":navigator.onLine===false?"offline":(err&&err.name==="AbortError")?"timeout":"failed";
     L.errMsg=err&&err.message?String(err.message):"";
     useFallback();
     schedule(L.err==="blocked"?REFRESH_MS:Math.min(REFRESH_MS,30000*Math.pow(2,L.fails-1)));
   }finally{
-    L.fetching=false;
-    noteChange(before);
-    render();
+    if(seq===refreshSeq){L.fetching=false;noteChange(before);render();}
   }
 }
 function useFallback(){
@@ -505,10 +636,27 @@ function useFallback(){
   if(c&&Date.now()-c.at<FRESH_CACHE_MS){L.mode="cached";L.at=c.at;L.by=c.by;L.src=c.src||"";}
   else{const h=historyData();L.mode="history";L.at=Date.now();L.by=h.by;L.calibrated=h.calibrated;}
 }
+function loadCachedForPark(){
+  const c=readCache();
+  if(c&&Date.now()-c.at<FRESH_CACHE_MS){L.mode="cached";L.at=c.at;L.by=c.by;L.src=c.src||"";}
+}
+function setPark(k,opts){
+  if(!PARKS[k]||k===S.park&&!(opts&&opts.force))return;
+  S.park=k;bindPark(k);save();
+  clearTimeout(timer);refreshSeq++;
+  L=blankLive();change=null;
+  loadCachedForPark();
+  renderSelects();
+  if(G&&gpsState!=="off"&&gpsState!=="denied"&&gpsState!=="unavailable")gpsState=classify(G);
+  render();
+  refresh();
+}
 
 // ---------- location ----------
 let G=null,gpsState="off",watchId=null,lastRenderPos=null;
-function inPark(p){return p.lat>PARK_BOX.s&&p.lat<PARK_BOX.n&&p.lon>PARK_BOX.w&&p.lon<PARK_BOX.e;}
+function inBox(p,b){return p.lat>b.s&&p.lat<b.n&&p.lon>b.w&&p.lon<b.e;}
+function parkAt(p){return PARK_KEYS.find(k=>inBox(p,PARKS[k].box))||null;}
+function classify(p){const k=parkAt(p);return k===P.key?"on":k?"otherpark":"outside";}
 function startGPS(){
   if(!S.autoLoc){gpsState="off";return;}
   if(!("geolocation" in navigator)){gpsState="unavailable";return;}
@@ -518,7 +666,9 @@ function startGPS(){
     watchId=navigator.geolocation.watchPosition(pos=>{
       const p={id:"gps",name:"Your location",lat:pos.coords.latitude,lon:pos.coords.longitude,acc:Math.round(pos.coords.accuracy||0),at:Date.now()};
       const prevState=gpsState;
-      G=p;gpsState=inPark(p)?"on":"outside";
+      G=p;gpsState=classify(p);
+      // First fix of the session inside a different park: switch to it automatically.
+      if(gpsState==="otherpark"&&!autoSwitched){autoSwitched=true;setPark(parkAt(p));return;}
       if(prevState!==gpsState||!lastRenderPos||meters(lastRenderPos,p)>25){lastRenderPos=p;render();}
     },err=>{
       gpsState=err&&err.code===1?"denied":"unavailable";
@@ -527,9 +677,10 @@ function startGPS(){
     },{enableHighAccuracy:true,maximumAge:30000,timeout:20000});
   }catch(e){gpsState="unavailable";}
 }
+let autoSwitched=false;
 function stopGPS(){if(watchId!=null){try{navigator.geolocation.clearWatch(watchId);}catch(e){}}watchId=null;G=null;gpsState="off";}
 function usingGPS(){return S.autoLoc&&gpsState==="on"&&G&&Date.now()-G.at<10*60000;}
-function place(id){return id==="entrance"?ENTRANCE:BYID[id];}
+function place(id){return ENTRANCES.find(e=>e.id===id)||BYID[id]||ENTRANCES[0];}
 function here(){return usingGPS()?G:place(S.loc);}
 function nearestRide(p){let best=null,bd=Infinity;for(const r of RIDES){const d=meters(p,r);if(d<bd){bd=d;best=r;}}return {r:best,d:bd};}
 
@@ -592,10 +743,10 @@ function plan(steps){
   return out;
 }
 function topPick(){if(!S.picked.length||L.mode==="loading")return null;const c=evaluate(here(),Date.now(),ridden(),true).filter(x=>x.ok);return c[0]?{id:c[0].id,wait:c[0].wait}:null;}
-let change=null; // {text, at}
+let change=null;
 function noteChange(before){
   const now=topPick();
-  if(before&&now&&before.id!==now.id){
+  if(before&&now&&before.id!==now.id&&BYID[before.id]){
     change={at:Date.now(),text:"Plan updated at "+fmtTime(Date.now())+": was "+BYID[before.id].name+". "+BYID[now.id].name+" is now the better move ("+now.wait+" min wait)."};
   }
 }
@@ -658,10 +809,16 @@ function renderBanner(){
   b.innerHTML=why+" "+showing+(L.err==="blocked"?"":'<br><button class="btn sm" id="retryNow">Retry now</button>');
   const r=$("retryNow");if(r)r.onclick=refresh;
 }
+function renderParks(){
+  document.querySelectorAll("#parkSeg button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.park===S.park)));
+  $("subTitle").textContent=P.name+" · standby lines only";
+  $("listTitle").textContent="Your "+P.name+" list";
+  $("countLabel").textContent="rides today at "+P.name;
+}
 function renderLocation(){
-  const line=$("gpsLine"),tx=$("gpsText");
+  const line=$("gpsLine"),tx=$("gpsText"),hint=$("parkHint");
   $("gpsToggle").checked=S.autoLoc;
-  line.className="gps-line";
+  line.className="gps-line";hint.hidden=true;
   let showPicker=true;
   if(usingGPS()){
     const n=nearestRide(G);
@@ -670,7 +827,14 @@ function renderLocation(){
     showPicker=false;
   }else if(!S.autoLoc){tx.textContent="Auto location is off. Pick where you are, or it follows your last ride.";}
   else if(gpsState==="asking"){line.classList.add("warn");tx.textContent="Finding your location…";}
-  else if(gpsState==="outside"){line.classList.add("warn");tx.textContent="GPS says you're outside the park, so planning from the spot below.";}
+  else if(gpsState==="otherpark"&&G){
+    const k=parkAt(G);
+    line.classList.add("warn");tx.textContent="GPS says you're at "+PARKS[k].name+", not "+P.name+".";
+    hint.hidden=false;
+    hint.innerHTML='<button class="btn sm primary" id="switchHere" style="flex:0 0 auto">Switch to '+esc(PARKS[k].name)+'</button>';
+    $("switchHere").onclick=()=>setPark(k);
+  }
+  else if(gpsState==="outside"){line.classList.add("warn");tx.textContent="GPS says you're outside "+P.name+", so planning from the spot below.";}
   else if(gpsState==="denied"){line.classList.add("warn");tx.textContent="Location access is off for this site. Allow it in Settings › Privacy › Location Services › Safari, or pick where you are.";}
   else {line.classList.add("warn");tx.textContent="GPS isn't available here. Pick where you are, or it follows your last ride.";}
   $("locRow").hidden=!showPicker;
@@ -680,8 +844,8 @@ function renderNext(path){
   const el=$("next");
   if(!path.length){
     const none=!S.picked.length;
-    el.innerHTML='<div class="eyebrow">Next ride</div><div class="name">'+(none?"Pick your rides":"Nothing on your list is open")+'</div>'+
-      '<p class="why muted" style="margin:0">'+(none?"Check up to 10 rides and rank them, and this card tells you which to ride next.":"Everything on your list is closed, down, skipped for now, or already ridden. Add more rides to your list or refresh.")+'</p>'+
+    el.innerHTML='<div class="eyebrow">Next ride · '+esc(P.name)+'</div><div class="name">'+(none?"Pick your rides":"Nothing on your list is open")+'</div>'+
+      '<p class="why muted" style="margin:0">'+(none?"Check up to 10 "+esc(P.name)+" rides and rank them, and this card tells you which to ride next.":"Everything on your list is closed, down, skipped for now, or already ridden. Add more rides to your list or refresh.")+'</p>'+
       '<div class="actions"><button class="btn primary" id="goPick">'+(none?"Pick rides":"Add rides")+'</button></div>';
     $("goPick").onclick=()=>{S.tab="prio";save();render();};
     return;
@@ -696,7 +860,7 @@ function renderNext(path){
   else if(p.tr>=1.03)timing="Line forecast to grow (up to ~"+o.hi.w+" min around "+fmtHour(o.hi.t)+") · <b>×"+p.tr.toFixed(2)+" ride-now bonus</b>";
   else if(p.tr<=0.97)timing="Forecast drops to ~"+o.lo.w+" min around "+fmtHour(o.lo.t)+" · ×"+p.tr.toFixed(2)+", still the best move now";
   else timing="Line expected to hold steady · ×"+p.tr.toFixed(2);
-  const fromTxt=usingGPS()?"your GPS position":(place(S.loc).name);
+  const fromTxt=usingGPS()?"your GPS position":place(S.loc).name;
   const math='<dl class="math num">'+
     '<dt>Priority</dt><dd><b>#'+p.rank+'</b> of '+n+' → weight '+p.w.toFixed(1)+(p.rr<1?' (re-ride, halved)':'')+'</dd>'+
     '<dt>Time</dt><dd>'+p.walk+' walk from '+esc(fromTxt)+' + '+(p.est?'~':'')+p.wait+' wait + '+p.r.dur+' ride = <b>'+p.total+' min</b>'+(p.est?' <span class="est">typical wait</span>':'')+'</dd>'+
@@ -770,7 +934,7 @@ function renderPrio(){
       const on=picked.has(r.id),dis=!on&&full;
       return '<div class="pick'+(dis?" disabled":"")+'"><label><input type="checkbox" id="p-'+r.id+'" data-pick="'+r.id+'"'+(on?" checked":"")+(dis?" disabled":"")+'><span>'+esc(r.name)+(done.has(r.id)?'<span class="tag">Done</span>':'')+'</span></label>'+waitChip(L.by[r.id])+'</div>';
     }).join("");
-    return '<div class="landhead">'+esc(l)+'</div>'+rows;
+    return rows?'<div class="landhead">'+esc(l)+'</div>'+rows:'';
   }).join("")+(full?'<p class="small muted" style="margin:10px 0 0">Your list is full. Remove a ride, or ride one, to free a slot.</p>':'');
   document.querySelectorAll("#paceSeg button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.pace===S.pace)));
   $("fcToggle").checked=S.useForecast;
@@ -784,15 +948,18 @@ function renderDay(){
     :'<p class="small muted" style="margin:0">Tap "I rode it" on the Next ride card and your rides land here.</p>';
 }
 function renderSelects(){
-  const groups=LANDS.map(l=>'<optgroup label="'+esc(l)+'">'+RIDES.filter(r=>r.land===l).map(r=>'<option value="'+r.id+'">'+esc(r.name)+'</option>').join("")+'</optgroup>').join("");
-  $("locSel").innerHTML='<option value="entrance">Park entrance</option>'+groups;
+  const groups=LANDS.map(l=>{
+    const opts=RIDES.filter(r=>r.land===l).map(r=>'<option value="'+r.id+'">'+esc(r.name)+'</option>').join("");
+    return opts?'<optgroup label="'+esc(l)+'">'+opts+'</optgroup>':'';
+  }).join("");
+  $("locSel").innerHTML=ENTRANCES.map(e=>'<option value="'+e.id+'">'+esc(e.name)+'</option>').join("")+groups;
   $("addSel").innerHTML=groups;
 }
 function render(){
-  setPill();renderBanner();renderLocation();
+  setPill();renderBanner();renderParks();renderLocation();
   const path=S.picked.length&&L.mode!=="loading"?plan(4):[];
   if(L.mode==="loading"&&S.picked.length){
-    $("next").innerHTML='<div class="eyebrow">Next ride</div><div class="name">Checking wait times…</div>';
+    $("next").innerHTML='<div class="eyebrow">Next ride · '+esc(P.name)+'</div><div class="name">Checking wait times…</div>';
     $("boardCard").hidden=true;$("thenCard").hidden=true;
   }else{renderNext(path);renderBoard(path);renderThen(path);}
   renderPrio();renderDay();
@@ -803,33 +970,36 @@ function render(){
 }
 
 // ---------- shared lists ----------
-function listToken(ids){return "list-"+ids.map(id=>DEFAULT_ORDER.indexOf(id).toString(36)).join("-");}
+// Link format: #list-<park>-<i>-<i>... with ride positions in base 36 (older links without a park are Magic Kingdom).
+function listToken(){return "list-"+P.key+"-"+S.picked.map(id=>DEFAULT_ORDER.indexOf(id).toString(36)).join("-");}
 function parseListToken(h){
-  const m=/^#?list-([0-9a-z]+(?:-[0-9a-z]+)*)$/.exec(h||"");
+  const m=/^#?list-(?:(mk|ep|hs|ak)-)?([0-9a-z]+(?:-[0-9a-z]+)*)$/.exec(h||"");
   if(!m)return null;
-  const ids=m[1].split("-").map(x=>DEFAULT_ORDER[parseInt(x,36)]).filter(Boolean);
+  const k=m[1]||"mk",order=PARKS[k].order;
+  const ids=m[2].split("-").map(x=>order[parseInt(x,36)]).filter(Boolean);
   const uniq=ids.filter((id,i)=>ids.indexOf(id)===i).slice(0,MAX_PICKS);
-  return uniq.length?uniq:null;
+  return uniq.length?{park:k,ids:uniq}:null;
 }
 function clearHash(){try{history.replaceState(null,"",location.pathname+location.search);}catch(e){}}
 function handleSharedList(){
-  const ids=parseListToken(location.hash);
-  if(!ids)return;
-  if(firstRun||!S.picked.length){S.picked=ids;save();clearHash();return;}
-  if(ids.join()===S.picked.join()){clearHash();return;}
+  const sh=parseListToken(location.hash);
+  if(!sh)return;
+  if(sh.park!==S.park){S.park=sh.park;bindPark(sh.park);}
+  if(firstRun||!S.picked.length){S.picked=sh.ids;save();clearHash();return;}
+  if(sh.ids.join()===S.picked.join()){clearHash();return;}
   const b=$("importBanner");
   b.hidden=false;
-  b.innerHTML='<b>Someone shared a ride list with you.</b> '+esc(ids.map((id,i)=>(i+1)+". "+BYID[id].name).join(", "))+
+  b.innerHTML='<b>Someone shared a '+esc(PARKS[sh.park].name)+' ride list with you.</b> '+esc(sh.ids.map((id,i)=>(i+1)+". "+PARKS[sh.park].byId[id].name).join(", "))+
     '<div class="actions" style="margin-top:8px"><button class="btn sm primary" id="useShared" style="flex:0 0 auto">Use this list</button><button class="btn sm" id="keepMine">Keep mine</button></div>';
-  $("useShared").onclick=()=>{S.picked=ids;save();b.hidden=true;clearHash();render();};
+  $("useShared").onclick=()=>{S.parks[sh.park].picked=sh.ids;save();b.hidden=true;clearHash();if(S.park!==sh.park)setPark(sh.park);else render();};
   $("keepMine").onclick=()=>{b.hidden=true;clearHash();};
 }
 async function shareList(){
-  const url=location.href.split("#")[0]+"#"+listToken(S.picked);
+  const url=location.href.split("#")[0]+"#"+listToken();
   const box=$("shareBox"),msg=$("shareMsg"),inp=$("shareUrl");
   inp.value=url;box.hidden=false;
   if(navigator.share){
-    try{await navigator.share({title:"My Magic Kingdom ride list",text:"Here's my ride list for the Ride Planner:",url});msg.textContent="Shared. Anyone who opens the link gets the planner with your list.";return;}
+    try{await navigator.share({title:"My "+P.name+" ride list",text:"Here's my "+P.name+" ride list for the Ride Planner:",url});msg.textContent="Shared. Anyone who opens the link gets the planner with your list.";return;}
     catch(e){if(e&&e.name==="AbortError"){msg.textContent="Share canceled. You can copy the link below.";return;}}
   }
   try{await navigator.clipboard.writeText(url);msg.textContent="Link copied. Anyone who opens it gets the planner with your list.";}
@@ -838,6 +1008,7 @@ async function shareList(){
 
 // ---------- actions ----------
 function logRide(id){S.log.push({id,t:Date.now()});S.loc=id;delete S.snooze[id];save();render();window.scrollTo({top:0,behavior:"smooth"});}
+$("parkSeg").addEventListener("click",e=>{const b=e.target.closest("[data-park]");if(!b)return;autoSwitched=true;setPark(b.dataset.park);});
 document.querySelector(".tabs").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(!b)return;S.tab=b.dataset.tab;save();render();});
 $("locSel").addEventListener("change",e=>{S.loc=e.target.value;save();render();});
 $("gpsToggle").addEventListener("change",e=>{S.autoLoc=e.target.checked;save();if(S.autoLoc)startGPS();else stopGPS();render();});
@@ -855,7 +1026,7 @@ plist.addEventListener("keydown",e=>{
   const j=e.key==="ArrowUp"?i-1:e.key==="ArrowDown"?i+1:-2;
   if(j<0||j>=S.picked.length)return;
   e.preventDefault();
-  S.picked.splice(i,1);S.picked.splice(j,0,id);save();render();
+  const list=S.picked.slice();list.splice(i,1);list.splice(j,0,id);S.picked=list;save();render();
   const nh=document.querySelector('[data-handle="'+id+'"]');if(nh)nh.focus();
 });
 let drag=null;
@@ -882,7 +1053,7 @@ plist.addEventListener("pointercancel",endDrag);
 $("picker").addEventListener("change",e=>{
   const t=e.target;if(!t.dataset.pick)return;
   const id=t.dataset.pick;
-  if(t.checked){if(openPicks()>=MAX_PICKS){t.checked=false;return;}if(!S.picked.includes(id))S.picked.push(id);}
+  if(t.checked){if(openPicks()>=MAX_PICKS){t.checked=false;return;}if(!S.picked.includes(id))S.picked=S.picked.concat(id);}
   else S.picked=S.picked.filter(x=>x!==id);
   save();render();
   const nb=$("p-"+id);if(nb)nb.focus();
@@ -897,7 +1068,7 @@ $("clearList").addEventListener("click",e=>{
 $("paceSeg").addEventListener("click",e=>{const b=e.target.closest("[data-pace]");if(!b)return;S.pace=b.dataset.pace;save();render();});
 $("fcToggle").addEventListener("change",e=>{S.useForecast=e.target.checked;save();render();});
 $("rerideToggle").addEventListener("change",e=>{S.reride=e.target.checked;save();render();});
-$("undo").addEventListener("click",()=>{S.log.pop();S.loc=S.log.length?S.log[S.log.length-1].id:"entrance";save();render();});
+$("undo").addEventListener("click",()=>{const l=S.log.slice();l.pop();S.log=l;S.loc=l.length?l[l.length-1].id:"entrance";save();render();});
 $("addBtn").addEventListener("click",()=>logRide($("addSel").value));
 let armed=null;
 $("newDay").addEventListener("click",e=>{
@@ -908,11 +1079,11 @@ $("newDay").addEventListener("click",e=>{
 });
 
 // ---------- boot ----------
-// A ride log from a previous day starts fresh automatically.
-if(S.log.length&&!sameDay(S.log[S.log.length-1].t)){S.log=[];S.snooze={};S.loc="entrance";}
+// Ride logs from a previous day start fresh automatically.
+for(const k of PARK_KEYS){const ps=S.parks[k];if(ps.log.length&&!sameDay(ps.log[ps.log.length-1].t)){ps.log=[];ps.snooze={};ps.loc="entrance";}}
 handleSharedList();
 save();
-(function(){const c=readCache();if(c&&Date.now()-c.at<FRESH_CACHE_MS){L.mode="cached";L.at=c.at;L.by=c.by;L.src=c.src||"";}})();
+loadCachedForPark();
 renderSelects();
 startGPS();
 render();
